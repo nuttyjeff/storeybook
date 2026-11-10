@@ -188,11 +188,13 @@ async function fuzzOne(b,kind,seed,N,add){
     if(cur!==tab0){try{await press(pg,`#ptabs [data-tab="${tab0}"] .nm`)}catch(e){back=false}back=back&&await waitF(pg,t=>window.__osp.curTab().id===t,tab0,3000)}
     /* the end plan is the start tab's plan: if the session wandered into another tab, undo / redo history belongs to each tab */
     const endT=back?await canon(pg):end;
+    /* how many steps undo will walk back; redo walks forward exactly that many (a session that ended with steps already undone keeps them on the redo stack, and redo-all would rightly go past the end) */
+    const p0=back?await ev(pg,()=>window.__osp.past()):0;
     let pres=0;const t0=Date.now();
     if(back){while(await ev(pg,()=>window.__osp.past())>0&&pres<N*3&&Date.now()-t0<40000){await press(pg,'#b-undo').catch(()=>{});pres++}}
     const afterU=await canon(pg);
     add(P+'undo',`${S} fuzz: ${INVN.undo}`,back&&afterU===start,{seed,presses:pres,back,differs:afterU===start?[]:diffKeys(start,afterU)});
-    let rp=0;const t1=Date.now();if(back){while(await ev(pg,()=>window.__osp.future())>0&&rp<N*3&&Date.now()-t1<40000){await press(pg,'#b-redo').catch(()=>{});rp++}}
+    let rp=0;const t1=Date.now();if(back){while(await ev(pg,()=>window.__osp.future())>0&&rp<p0&&Date.now()-t1<40000){await press(pg,'#b-redo').catch(()=>{});rp++}}
     const afterR=await canon(pg);
     add(P+'redo',`${S} fuzz: ${INVN.redo}`,back&&afterR===endT,{seed,presses:rp,differs:afterR===endT?[]:diffKeys(endT,afterR)});
     add(P+'clean',`${S} fuzz: undo / redo phase had no console errors`,pg.errs.length===eFz,pg.errs.slice(eFz,eFz+3));
