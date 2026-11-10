@@ -20,7 +20,8 @@ const HELPERS=`(()=>{
  const rect3=()=>q('#v3c').getBoundingClientRect();
  const ray=(x,y)=>{const T=o.T3(),r=rect3();const rc=new T.THREE.Raycaster();rc.setFromCamera(new T.THREE.Vector2((x-r.left)/r.width*2-1,-(y-r.top)/r.height*2+1),T.camera);return rc.intersectObjects(T.group.children,true)};
  const firstId=(x,y)=>{for(const hh of ray(x,y)){let m=hh.object;while(m&&!m.userData.id)m=m.parent;if(m)return m.userData.id}return null};
- const onCanvas=(x,y)=>{const r=rect3();return x>r.left+4&&x<r.right-4&&y>r.top+4&&y<r.bottom-4&&document.elementFromPoint(x,y)===q('#v3c')};
+ /* on the canvas with nothing else within a finger's reach: since 4.6.1 the north arrow takes touches in 3D, and the browser's touch adjustment sends a touch a few px off it to the arrow */
+ const onCanvas=(x,y)=>{const r=rect3(),c=q('#v3c');return x>r.left+4&&x<r.right-4&&y>r.top+4&&y<r.bottom-4&&[[0,0],[14,0],[-14,0],[0,14],[0,-14]].every(([dx,dy])=>document.elementFromPoint(x+dx,y+dy)===c)};
  const proj=(wx,wy,wz)=>{const T=o.T3(),r=rect3();const v=new T.THREE.Vector3(wx*.001,wz*.001,wy*.001).project(T.camera);return [r.left+(v.x*.5+.5)*r.width,r.top+(-v.y*.5+.5)*r.height]};
  const itemPt3=id=>{const it=o.byId(id);for(const f of [0.5,0.9,0.3]){const p=proj(it.x,it.y,Math.min(it.h||700,900)*f);if(onCanvas(p[0],p[1])&&firstId(p[0],p[1])===it.id)return p}return null};
  const pick3=()=>{const C=o.S().objs.filter(x=>x.t==='item'&&!x.gid&&!x.arr&&!/^door|^win|lift|stair/.test(x.shape||'')&&x.w>=500&&x.d>=500);for(const it of C){const p=itemPt3(it.id);if(p)return {id:it.id,p}}return null};

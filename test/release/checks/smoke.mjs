@@ -68,6 +68,34 @@ async function desktop(b){
    add(R,'s-sun','sun study: noon elevation positive and apply runs clean',s.el>0&&e0()===0,s);await to2D(pg)}
   /* building: floors and plan JSON */
   {const r=await ev(pg,()=>{const o=window.__osp,S=o.S();const tabs=o.tabs();const j=JSON.parse(o.planJSON());return {tabs:tabs.length,v:j.v,objs:j.objs.length,bld:!!S.bld}});add(R,'s-plan-json','plan serialises with version, objects and building',r.v>=6&&r.objs>100&&r.bld,r)}
+  /* 4.6.1: cost estimate (A&A / new build, rate × GFA, own GFA, undo, saved) */
+  {const r=await ev(pg,async()=>{const o=window.__osp,S=o.S(),q=s=>document.querySelector(s),w=t=>new Promise(r=>setTimeout(r,t));if(q('#d-insp').hidden)q('#t-insp').click();q('[data-tab=sch]').click();await w(150);
+     const ty=q('#cost-box [data-cost-type=nb]');ty.click();await w(80);const rate=q('#cost-rate');rate.focus();rate.value='4000';rate.dispatchEvent(new Event('input',{bubbles:true}));rate.dispatchEvent(new Event('change',{bubbles:true}));rate.blur();await w(80);
+     const c1=o.costCalc(),shown=q('#cost-total').textContent;const g=q('#cost-gfa');g.focus();g.value='1000';g.dispatchEvent(new Event('input',{bubbles:true}));g.dispatchEvent(new Event('change',{bubbles:true}));g.blur();await w(80);const c2=o.costCalc();
+     const saved=JSON.parse(o.planJSON()).cost;o.undo();await w(80);const c3=o.costCalc();q('[data-tab=sel]').click();
+     return {type:c1.type,m:c1.measured,t1:Math.round(c1.total),shown,t2:c2.total,saved,undoGfa:c3.override}});
+   add(R,'s-cost','cost: New build rate × measured GFA shows as the total; own GFA overrides; saved with the plan; undo puts the GFA back',r.type==='nb'&&r.m>0&&r.t1===Math.round(4000*r.m)&&/S\$ [\d,]+/.test(r.shown)&&r.t2===4000000&&r.saved&&r.saved.type==='nb'&&r.saved.rate.nb===4000&&r.undoGfa===false,r)}
+  /* 4.6.1: security zones: set on a room, overlay toggles on and off in 2D, room floor takes the colour in 3D */
+  {const r=await ev(pg,async()=>{const o=window.__osp,S=o.S(),q=s=>document.querySelector(s),w=t=>new Promise(r=>setTimeout(r,t));const room=S.objs.find(x=>x.t==='room');o.setZoneLayer(false);
+     o.setSel([room.id]);q('[data-tab=sel]').click();await w(100);const btn=q('#p-sel [data-zone=red]');if(btn)btn.click();await w(150);
+     const on1=o.P().layers.secz===true,drawn=!!q('#L-egress .sz-red'),leg=!q('#sz-legend').hidden,zone=o.S().objs.find(x=>x.id===room.id).zone;
+     q('#sz-legend [data-sz=off]').click();await w(100);const off=!q('#L-egress .sz-red')&&q('#sz-legend').hidden;o.undo();await w(100);const und=o.S().objs.find(x=>x.id===room.id).zone;o.redo();await w(50);o.setSel([]);
+     return {btn:!!btn,zone,on1,drawn,leg,off,und}});
+   add(R,'s-zones','security zones: Red set from Selection shows on the plan with a legend, the legend hides it, undo clears the zone',r.btn&&r.zone==='red'&&r.on1&&r.drawn&&r.leg&&r.off&&r.und==null,r)}
+  /* 4.6.1: Details tabs scroll sideways when they do not fit, with an arrow that works */
+  {const r=await ev(pg,async()=>{const q=s=>document.querySelector(s),w=t=>new Promise(r=>setTimeout(r,t));const tb=q('#d-insp .tabs'),wr=tb.parentNode;const d=q('#d-insp');const w0=d.style.width;d.style.width='260px';await w(200);
+     const ovf=tb.scrollWidth>tb.clientWidth,ar=wr.querySelector('.tabs-arr.r'),vis=!ar.hidden;ar.click();await w(600);const moved=tb.scrollLeft>0;q('[data-tab=secz]').click();await w(300);const tr=q('#tab-secz').getBoundingClientRect(),br=tb.getBoundingClientRect();const inView=tr.right<=br.right+1&&tr.left>=br.left-1;
+     q('[data-tab=sel]').click();d.style.width=w0;return {ovf,vis,moved,inView}});
+   add(R,'s-tabs-scroll','Details tabs: a narrow panel scrolls the tab row with its arrow, and the open tab is kept in view',r.ovf&&r.vis&&r.moved&&r.inView,r)}
+  /* 4.6.1: review: pins keep their number, resolve stamps who and when, replies, open filter, export rows */
+  {const r=await ev(pg,async()=>{const o=window.__osp,S=o.S(),q=s=>document.querySelector(s),w=t=>new Promise(r=>setTimeout(r,t));o.P().me='Tester';S.pins=[];const a=o.newPin(1000,1000);S.pins.push(a);const b=o.newPin(3000,1000);S.pins.push(b);o.render();
+     o.setSel([]);q('[data-tab=notes]').click();await w(150);const cb=q(`#p-notes [data-pindone="${a.id}"]`);cb.click();await w(100);const A=S.pins.find(p=>p.id===a.id);
+     const inp=q(`#p-notes [data-pinrep="${b.id}"]`);inp.value='Agreed, will move it';q(`#p-notes [data-pinrepgo="${b.id}"]`).click();await w(100);const B=S.pins.find(p=>p.id===b.id);
+     q('#p-notes [data-revf=open]').click();await w(100);const listed=[...document.querySelectorAll('#p-notes [data-pindone]')].map(x=>x.dataset.pindone);const plan=[...document.querySelectorAll('#plan [data-pin] .pin-n')].map(t=>t.textContent);
+     const rows=o.reviewRows();q('#p-notes [data-revf=all]').click();S.pins=[];o.render();q('[data-tab=sel]').click();
+     return {nos:[a.no,b.no],done:A.done,by:A.doneBy,at:!!A.doneAt,rep:(B.replies||[]).map(x=>x.by+':'+x.text),listed,plan,hdr:rows[3]&&rows[3][2],r1:rows[4]&&rows[4].slice(0,5)}});
+   add(R,'s-review','review: pins keep numbers 1 and 2, Resolved stamps the reviewer and date, a reply is kept, the Open filter lists only open pins, export has status and author',
+     r.nos.join()==='1,2'&&r.done&&r.by==='Tester'&&r.at&&r.rep.join()==='Tester:Agreed, will move it'&&r.listed.length===1&&r.plan.includes('2')&&r.hdr==='Status'&&r.r1&&r.r1[2]==='Resolved'&&r.r1[4]==='Tester',r)}
   /* north setting: widget, Building field, Sun bar, sun vector, save/load */
   {await to2D(pg);const r=await ev(pg,async()=>{const o=window.__osp;o.setNorth(90);const w=document.querySelector('#north');const widget=w.style.getPropertyValue('--n');document.querySelector('[data-tab=bld]').click();await new Promise(r=>setTimeout(r,80));const bld=document.querySelector('#bld-north').value;const sun=document.querySelector('#sun-north').value;
      const v90=o.sunVec(180,45).map(x=>+x.toFixed(2));o.setNorth(0);const v0=o.sunVec(180,45).map(x=>+x.toFixed(2));o.setNorth(90);

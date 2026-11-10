@@ -79,8 +79,38 @@ main{position:relative;overflow:hidden;min-height:0}
 .lib-row .nm{font-size:13px;line-height:1.25}
 .lib-row .sz{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
 .tabs{display:flex;gap:2px;padding:6px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}.tabs>button{flex:0 0 auto}
-.tabs button{flex:1;border:none;background:transparent;border-radius:7px;padding:6px 4px;cursor:pointer;color:var(--muted);font-weight:500}
+.tabs button{flex:1 0 auto;white-space:nowrap;border:none;background:transparent;border-radius:7px;padding:6px 4px;cursor:pointer;color:var(--muted);font-weight:500}
 .tabs button.on{background:var(--accent-soft);color:var(--ink)}
+/* Details tabs: scroll sideways, with arrows at the ends when they overflow */
+.tabsw{position:relative;display:flex;align-items:stretch;border-bottom:1px solid var(--line)}
+.tabsw .tabs{flex:1 1 auto;min-width:0;border-bottom:0;scroll-padding-inline:44px}
+/* the arrows sit over the ends of the row, so showing or hiding one never shifts the tabs under a finger */
+.tabs-arr{position:absolute;top:0;bottom:0;width:32px;border:none;background:var(--panel);color:var(--ink);font-size:19px;line-height:1;cursor:pointer;padding:0;z-index:2}
+.tabs-arr.l{left:0}.tabs-arr.r{right:0}
+.tabs-arr.l{box-shadow:6px 0 8px -6px rgba(0,0,0,.25)}.tabs-arr.r{box-shadow:-6px 0 8px -6px rgba(0,0,0,.25)}
+.tabs-arr:hover{color:var(--accent)}.tabs-arr[hidden]{display:none}
+/* cost estimate */
+.cost .seg .btn{border:none}
+.cost-tot{display:grid;gap:2px;margin-top:10px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.cost-tot b{font-size:20px;font-variant-numeric:tabular-nums}.cost-tot>span{font-size:11.5px}
+/* security zones */
+.szc{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;border:1px solid transparent}
+.szc.sz-white{background:#fff;border:1px dashed #7d8792}.szc.sz-green{background:#2f9e5b}.szc.sz-red{background:#d64534}.szc.sz-black{background:#1b1e22;border-color:#5b6470}.szc.sz-none{background:transparent;border:1px solid var(--line)}
+.szrow{display:flex;flex-wrap:wrap;gap:5px}.szrow .btn{display:inline-flex;align-items:center;gap:5px}
+.sz-legend{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:var(--panel);color:var(--ink);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:14px;white-space:nowrap;padding:5px 8px 5px 12px;font-size:12px;z-index:37;display:flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:calc(100% - 24px)}
+.sz-legend[hidden]{display:none}.sz-legend b{font-weight:600;margin-right:2px}.sz-legend .szc{margin-left:6px}
+.sz-legend button{border:none;background:transparent;color:var(--ink);cursor:pointer;font-size:14px;margin-left:2px;padding:0 4px;opacity:.7}.sz-legend button:hover{opacity:1}
+.linkbtn{border:none;background:none;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer;font:inherit}
+.szlist select{max-width:120px}
+#main.mode3d .sz-legend{top:auto;bottom:128px}#main.walking .sz-legend{display:none}
+@media (max-width:820px),(pointer:coarse) and (max-height:500px){.sz-legend{top:6px;padding:4px 4px 4px 10px;font-size:11.5px;flex-wrap:nowrap}.sz-legend>b,.sz-legend .muted{display:none}#main.mode3d .sz-legend{bottom:calc(76px + env(safe-area-inset-bottom,0px))}}
+/* review */
+.rev-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}
+.rev-all{display:flex;gap:5px;align-items:center;font-size:12px}.rev-all input{width:auto}
+.pin-item .pin-meta{font-size:11.5px;margin:-2px 0 5px}
+.pin-rep{font-size:12.5px;border-left:2px solid var(--line);padding:2px 0 2px 8px;margin:6px 0 0}
+.pin-reply{display:flex;gap:6px;margin-top:6px}.pin-reply input{flex:1;min-width:0}
+
 .fld{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}
 .fld label{display:grid;gap:3px;font-size:12px;color:var(--muted)}
 .fld label.full{grid-column:1/-1}
@@ -224,6 +254,7 @@ input[type=checkbox]{accent-color:var(--accent)}
 .d3-badge{position:absolute;left:50%;transform:translateX(-50%);top:106px;z-index:7;background:#2f6db5;color:#fff;font-size:12px;font-weight:600;padding:4px 12px;border-radius:999px;box-shadow:var(--shadow);pointer-events:none}
 </style>
 <style id="plan-style">
+.sz-t{font-weight:700;letter-spacing:.06em;fill:#1b1e22;paint-order:stroke;stroke:#fff;stroke-width:3px}.sz-t-green{fill:#1f7a43}.sz-t-red{fill:#b3301f}.sz-t-black{fill:#fff;stroke:#1b1e22}
 .grid-minor{stroke:var(--grid)} .grid-major{stroke:var(--grid-major)}
 .room-f{fill:var(--room);stroke:var(--wall);stroke-linejoin:miter}
 .room-f.sel{fill:var(--room-sel)}
@@ -452,7 +483,7 @@ html.touch #b-del{display:inline-flex}html.touch #b-del:disabled{opacity:.35}htm
   #main:has(textarea:focus,input:focus) .drawer{max-height:40vh}
   /* sheets leave at least 45% of a small phone for the plan (header ≈ 109 px + bar 58 px are fixed); their contents scroll */
   #main .drawer,#main .psheet{max-height:max(130px,calc(55vh - 210px))!important}
-  #main:has(textarea:focus,input:focus) .drawer{max-height:40vh!important}  .drawer .tabs,.psheet .tabs{flex:none}.tabs button{flex:none}
+  #main:has(textarea:focus,input:focus) .drawer{max-height:40vh!important}  .drawer .tabsw,.drawer>.tabs,.psheet .tabs{flex:none}.tabs button{flex:none}
   #main .hint{display:none}
   /* Details field grids never grow past the sheet: a wide neighbour must not push the Label field off the right edge */
   #main .fld{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}#main .fld3{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -646,8 +677,9 @@ html.touch #b-del{display:inline-flex}html.touch #b-del:disabled{opacity:.35}htm
       <button type="button" data-tab="sch" id="tab-sch">Schedule</button>
       <button type="button" data-tab="und" id="tab-und">Underlay</button>
       <button type="button" data-tab="bld" id="tab-bld">Floors</button>
-      <button type="button" data-tab="notes" id="tab-notes">Notes</button>
+      <button type="button" data-tab="notes" id="tab-notes">Review</button>
       <button type="button" data-tab="fire" id="tab-fire">Exits</button>
+      <button type="button" data-tab="secz" id="tab-secz">Security</button>
     </div>
     <div class="db" id="p-sel"></div>
     <div class="db" id="p-sch" hidden></div>
@@ -655,6 +687,7 @@ html.touch #b-del{display:inline-flex}html.touch #b-del:disabled{opacity:.35}htm
     <div class="db" id="p-bld" hidden></div>
     <div class="db" id="p-notes" hidden></div>
     <div class="db" id="p-fire" hidden></div>
+    <div class="db" id="p-secz" hidden></div>
   </section>
 
     <div class="fbar" id="multibar" hidden><b>0 selected</b><span class="muted">tap objects to add or remove</span><button class="btn sm primary" type="button" id="multi-done">Done</button></div>
@@ -824,6 +857,7 @@ html.touch #b-del{display:inline-flex}html.touch #b-del:disabled{opacity:.35}htm
       <div id="snap-body"></div></div>
   </div>
   <div class="cmp-legend" id="cmp-legend" hidden></div>
+  <div class="sz-legend" id="sz-legend" hidden></div>
   <div class="upd" id="upd" hidden role="status">A newer StoreyBook (<b></b>) is ready. <button type="button" class="btn sm primary" id="upd-go">Reload</button><button type="button" id="upd-x" aria-label="Dismiss">✕</button></div>
   <div class="toast" id="toast" hidden role="status"></div>
   <div class="drop" id="drop" hidden>Drop a plan file, library CSV, or a floor plan PDF, PNG or JPEG</div>
