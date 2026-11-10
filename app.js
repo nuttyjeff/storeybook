@@ -2976,16 +2976,19 @@ function init3D(){
     markDirty();clashDirty=true;render();renderInspector();build3D()};
   cv.addEventListener('pointerup',endVh,true);cv.addEventListener('pointercancel',endVh,true);
   /* touch and pen: holding still for half a second opens the menu (iOS sends no contextmenu event) */
-  {let lp3=null;const lpClear=()=>{if(lp3){clearTimeout(lp3.t);lp3=null}};
+  {let lp3=null,lpLast=null;const lpClear=()=>{if(lp3){clearTimeout(lp3.t);lp3=null}};
     /* on #v3, ahead of the item handler that stops the event before it reaches the canvas */
     const v3el=$('#v3');v3el.addEventListener('pointerdown',e=>{if(e.target!==cv)return;lpClear();if(e.pointerType==='mouse'||WALK.on||bldView||d3Active()||tool==='place'||tool==='paint')return;
       const ev={clientX:e.clientX,clientY:e.clientY,target:e.target,preventDefault(){}},pid=e.pointerId;
-      lp3={pid,x:e.clientX,y:e.clientY,t:setTimeout(()=>{if(!lp3||lp3.pid!==pid)return;lp3=null;
+      const ts=e.timeStamp;lp3={pid,x:e.clientX,y:e.clientY,t:setTimeout(()=>{if(!lp3||lp3.pid!==pid)return;lp3=null;lpLast={pid,ts,item:!!itemAt(ev)};
         if(mv3){mv3.orig.forEach(([id,o0])=>{const g=mv3.gs[id];if(g){g.position.set(o0.x*0.001,0,o0.y*0.001);g.rotation.y=-(o0.r||0)*Math.PI/180}});mv3=null}
         down=null;controls.enabled=false;setTimeout(()=>{controls.enabled=true},0);lpFired=true;lpMenuPid=pid;if(navigator.vibrate)navigator.vibrate(8);
         ctxFrom3D(ev,itemAt(ev),floorAt(ev))},480)}},true);
     v3el.addEventListener('pointermove',e=>{if(lp3&&e.pointerId===lp3.pid&&Math.hypot(e.clientX-lp3.x,e.clientY-lp3.y)>10)lpClear();else if(lp3&&e.pointerId!==lp3.pid)lpClear()},true);
-    ['pointerup','pointercancel'].forEach(t=>v3el.addEventListener(t,e=>{if(lp3&&e.pointerId===lp3.pid)lpClear()},true))}
+    ['pointerup','pointercancel'].forEach(t=>v3el.addEventListener(t,e=>{if(lp3&&e.pointerId===lp3.pid)lpClear();
+      /* a busy 3D frame can run the long-press timer before a quick tap's lift is handled; the lift's own time stamp says when the finger really came up, so a tap shorter than the hold opens no menu and still clears the selection */
+      else if(lpLast&&e.pointerId===lpLast.pid&&e.timeStamp-lpLast.ts<440){const L=lpLast;lpLast=null;$('#ctxmenu').hidden=true;lpFired=false;if(!L.item&&tool==='select'&&!multiMode&&(sel.size||pinSel)){sel.clear();pinSel=null;render();renderInspector()}}
+      if(lpLast&&e.pointerId===lpLast.pid)lpLast=null},true))}
   $('#v3').addEventListener('contextmenu',e=>{e.preventDefault();if(WALK.on||bldView)return;if(d3ClickPoly(tool)&&polyPts&&polyPts.length>=2){finishPoly(false);drawD3Overlay();return}if(d3Active()){setTool('select');return}const it=itemAt(e);const g=floorAt(e);ctxFrom3D(e,it,g)});
   /* ---- draw on the ground plane in 3D ---- */
   $('#v3').addEventListener('pointerdown',e=>{if(e.target!==cv||WALK.on||bldView||e.button!==0||!d3Active())return;const w=floorAt(e);if(!w)return;
