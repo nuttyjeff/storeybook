@@ -79,7 +79,14 @@ async function desktop(b){
      const T=o.T3();T.controls.target.set(0,0,0);T.camera.position.set(8000,6000,-9000);T.camera.lookAt(0,0,0);T.controls.update();T.controls.dispatchEvent({type:'change'});await new Promise(r=>setTimeout(r,250));const n2=w.style.getPropertyValue('--n');
      const dxf=o.exportDXF()||'';o.setNorth(0);
      return {vis,n1,n2,turned:n1!==n2,layer:(dxf.match(/\nNORTH\n/g)||[]).length>=3}});
-   add(R,'s-north-3d','north: 3D widget visible, turns with the camera, DXF has a NORTH layer',r.vis&&r.turned&&r.layer,r);await to2D(pg)}
+   add(R,'s-north-3d','north: 3D widget visible, turns with the camera, DXF has a NORTH layer',r.vis&&r.turned&&r.layer,r);
+   /* north set in 3D: a quarter-turn mouse drag round the arrow turns north ~90°, one undo puts it back */
+   {const T3o=await ev(pg,()=>{const T=window.__osp.T3();T.camera.position.set(6000,9000,7000);T.controls.update();T.controls.dispatchEvent({type:'change'});return 1});await pg.waitForTimeout(200);
+    const c=await ev(pg,()=>{const w=document.querySelector('#north'),r=w.getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2,r.width/2,w.contains(document.elementFromPoint(r.left+r.width/2,r.top+6))]});
+    const p0=await ev(pg,()=>window.__osp.past());await pg.mouse.move(c[0],c[1]-c[2]+5);await pg.mouse.down();for(let i=1;i<=12;i++){const a=(Math.PI/2)*i/12;await pg.mouse.move(c[0]+Math.sin(a)*(c[2]-5),c[1]-Math.cos(a)*(c[2]-5))}await pg.mouse.up();await pg.waitForTimeout(150);
+    const r2=await ev(pg,async()=>{const o=window.__osp,n=o.S().north,p=o.past();o.undo();await new Promise(r=>setTimeout(r,100));return {n,steps:p,back:o.S().north}});
+    add(R,'s-north-3d-set','north: in 3D the arrow can be dragged to set north, and undo puts it back',c[3]&&r2.n>=75&&r2.n<=105&&r2.back===0&&r2.steps===p0+1,{reachable:c[3],...r2,p0})}
+   await to2D(pg)}
   /* My plans: a thumbnail per row, Export all round-trips through Import (a newer copy in the browser wins) */
   {const r=await ev(pg,async()=>{const o=window.__osp,P=o.PLANS;o.markDirty();await new Promise(r=>setTimeout(r,1800));P.flush();await new Promise(r=>setTimeout(r,300));const rows=await P.list();const t=await P.exportAll();const j=JSON.parse(t);const same=await P.importAll(t);
      const j2=JSON.parse(t);j2.plans=[Object.assign({},j2.plans[0],{pid:'gate-import',updated:Date.now()+5})];const imp=await P.importAll(JSON.stringify(j2));const got=await P.get('gate-import');await P.del('gate-import');
