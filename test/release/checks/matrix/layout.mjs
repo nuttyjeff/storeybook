@@ -466,7 +466,7 @@ async function phase3D(pg,d,R){
 async function keyboard(pg,d,o,vp,R){
   if(!(await phoneShell(pg))||!d.touch)return;const vvH=await ev(pg,()=>/visualViewport\.(addEventListener|onresize)/.test(document.documentElement.innerHTML));
   const one=async(id,nm,open,field)=>{if(reSCR&&!reSCR.test('kbd-'+id))return;let pass=false,det='';
-    try{await reset(pg);await ev(pg,()=>window.__osp.fit());await open();await tapEl(pg,field);await waitFor(pg,f=>document.activeElement===document.querySelector(f),field,3000).catch(()=>{});
+    try{await reset(pg);await ev(pg,()=>window.__osp.fit());await open();/* let the sheet finish sliding up before the finger lands */await sleep(350);await tapEl(pg,field);await waitFor(pg,f=>document.activeElement===document.querySelector(f),field,3000).catch(()=>{});
       const f0=await ev(pg,f=>document.activeElement===document.querySelector(f),field);if(!f0)throw new Error('PRECONDITION: tapping '+field+' did not focus it');
       const H=Math.round(vp.height*0.55);await pg.setViewportSize({width:vp.width,height:H});await waitFor(pg,h=>innerHeight===h,H,3000).catch(()=>{});await sleep(200);
       const st=await ev(pg,f=>{const e=document.querySelector(f);const r=e.getBoundingClientRect();const h=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);

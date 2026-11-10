@@ -327,9 +327,10 @@ input[type=checkbox]{accent-color:var(--accent)}
 html.touch button,html.touch [role=button],html.touch .btn{touch-action:manipulation}
 /* phones (and short landscape screens): every control is at least 40 px to hit with a finger */
 @media (max-width:820px),(max-height:500px){
-  html.touch button,html.touch .btn,html.touch .chip,html.touch .csw,html.touch .cdef,html.touch select,html.touch input[type=color],html.touch [role=button]{min-height:40px!important;min-width:40px!important}
+  /* only controls in the app's bars, sheets, menus and dialogs: helper buttons laid over the plan or the 3D view keep their own size */
+  html.touch :is(header,.top,.mbar,.pop,.drawer,.psheet,.keys-modal,.modal,.sun-bar,.pstrip,.paintstrip,#paintstrip,#multibar,#ctxmenu,#plans-modal,#snap-modal,#mig-modal,#guide-modal,.esc,.polybar,#polybar,.walk-hud,.tabs,.ptabs) :is(button,.btn,.chip,.csw,.cdef,select,input[type=color],[role=button]){min-height:40px!important;min-width:40px!important}
   html.touch .sw{min-height:32px}html.touch .sw input{min-height:32px!important;margin:0!important;top:-5px}
-  html.touch .v3bar{gap:8px}
+  html.touch #main .v3bar{gap:8px}html.touch .v3bar :is(button,.btn,select){min-height:32px!important}
   html.touch input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]){min-height:40px!important}
   html.touch input[type=checkbox],html.touch input[type=radio]{min-width:32px;min-height:32px;margin:4px}
   /* colour wheel (Settings, Details) and the Sun time slider are finger targets too */

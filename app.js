@@ -117,7 +117,7 @@ if(!P.det||typeof P.det!=='object')P.det={tmin:75,tmax:350,gap:1850,rooms:true};
    - each step must be safe to run twice
    - only change values that still equal the old default, so users' own edits survive
    - anything this version does not understand (new object types, new fields) is kept and written back on save */
-const APP_VERSION='4.5.0',PLAN_V=6,LIB_V=10;
+const APP_VERSION='4.6.0',PLAN_V=6,LIB_V=10;
 const KNOWN_T=['room','wall','item','text','dim','trunk'];
 /* v1 rack clearances were service aisles; v2 stores door leaf widths */
 const OLD_RACK={RK6010:[1200,1000],RK6012:[1200,1000],RK8010:[1200,1000],IRC3012:[1200,1000],UPS6085:[1000,600],WMC6045:[900,0]};
@@ -451,7 +451,7 @@ function applyView(){svg.setAttribute('viewBox',`${V.x} ${V.y} ${W/V.k} ${H/V.k}
 function setNorth(v,opts={}){v=((Math.round(+v||0)%360)+360)%360;if(v===num(S.north,0)&&!opts.force)return;if(!opts.quiet)checkpoint();S.north=v;markDirty();drawNorth();if(SUN.on&&typeof applySun==='function')applySun();if(!opts.quiet)toast(v===0?'North is up':`North is ${v}° clockwise from up`)}
 /* in 3D the arrow turns with the camera: project the plan's up direction to the screen and add the plan's north angle */
 function northScreenAngle(){if(!is3D||!T3||!T3.camera)return 0;const {camera,controls}=T3;const a=controls.target.clone(),b=a.clone();b.z-=1;a.project(camera);b.project(camera);const dx=b.x-a.x,dy=-(b.y-a.y);if(Math.abs(dx)+Math.abs(dy)<1e-6)return 0;return Math.atan2(dx,-dy)*180/Math.PI}
-function drawNorth(){const n=num(S.north,0)+northScreenAngle();const w=$('#north');if(w){/* desktop: sit just left of the toolbar dock, whatever its width */if(!PHONE()){const d=$('.dock');if(d){const r=d.getBoundingClientRect(),m=$('#main').getBoundingClientRect();if(r.width)w.style.left=Math.max(8,r.left-m.left-w.offsetWidth-14)+'px'}}else w.style.left='';w.style.setProperty('--n',n+'deg');w.title=is3D?`North · ${num(S.north,0)}° clockwise from plan-up · turns with the camera; set it in Details › Floors`:`North · ${num(S.north,0)}° clockwise from up · drag to rotate, double-click to set north up`;w.querySelector('.nv').textContent=num(S.north,0)+'°'}
+function drawNorth(){const n=num(S.north,0)+northScreenAngle();const w=$('#north');if(w){/* in 3D the arrow only shows the direction; touches pass through to the view so it never blocks an orbit */w.style.pointerEvents=is3D?'none':'';/* desktop: sit just left of the toolbar dock, whatever its width */if(!PHONE()){const d=$('.dock');if(d){const r=d.getBoundingClientRect(),m=$('#main').getBoundingClientRect();if(r.width)w.style.left=Math.max(8,r.left-m.left-w.offsetWidth-14)+'px'}}else w.style.left='';w.style.setProperty('--n',n+'deg');w.title=is3D?`North · ${num(S.north,0)}° clockwise from plan-up · turns with the camera; set it in Details › Floors`:`North · ${num(S.north,0)}° clockwise from up · drag to rotate, double-click to set north up`;w.querySelector('.nv').textContent=num(S.north,0)+'°'}
   const a=$('#bld-north');if(a&&document.activeElement!==a)a.value=n;const b=$('#sun-north');if(b&&document.activeElement!==b)b.value=n}
 function northSVG(cx,cy,r,n){/* arrow for exports, in world units */
   return `<g transform="translate(${cx} ${cy}) rotate(${n})" font-family="Inter,Arial,sans-serif"><circle r="${r}" fill="none" stroke="#1d2a38" stroke-width="${r*0.06}"/><path d="M0 ${-r*0.82} L${r*0.26} ${r*0.3} L0 ${r*0.1} L${-r*0.26} ${r*0.3} Z" fill="#1d2a38"/><text y="${-r*0.95}" text-anchor="middle" font-size="${r*0.5}" font-weight="700" fill="#1d2a38">N</text></g>`}
