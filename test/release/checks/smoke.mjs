@@ -170,6 +170,16 @@ async function phone(b){
    await click(pg,'#mbar [data-m=select]');await pg.waitForTimeout(100);const a=await sel();const t=await touch(pg);const pt=await ev(pg,()=>{const r=document.querySelector('#plan').getBoundingClientRect();return[r.left+r.width*0.5,r.top+40]});
    await t.tap(pt[0],pt[1]);await pg.waitForTimeout(150);const b=await n();await sel();await click(pg,'#mbar [data-m=select]');await pg.waitForTimeout(150);const c=await n();
    add(R,'p-deselect','phone: tapping empty plan or the Select slot clears a selection',a>10&&b===0&&c===0,{a,b,c})}
+  /* row 30: with Details up, a tap on the plan puts it away · row 31: pulling down anywhere on a sheet closes it, unless its content is scrolled */
+  {const t=await touch(pg);const vis=s=>ev(pg,s=>!document.querySelector(s).hidden,s);const pick=()=>ev(pg,()=>{const o=window.__osp;o.setSel([o.S().objs.find(x=>x.t==='item').id])});
+   const box=s=>ev(pg,s=>{const r=document.querySelector(s).getBoundingClientRect();return [r.left+r.width/2,r.top+r.height*0.55]},s);
+   await pick();await click(pg,'#mbar [data-m=insp]');await pg.waitForTimeout(300);const d0=await vis('#d-insp');const pt=await ev(pg,()=>{for(let y=150;y<450;y+=20)for(let x=30;x<360;x+=20){const h=document.elementFromPoint(x,y);if(h&&h.closest('#plan')&&!h.closest('[data-id]'))return [x,y]}return null});
+   if(pt){await t.tap(pt[0],pt[1]);await pg.waitForTimeout(300)}const d1=await vis('#d-insp');
+   add(R,'p-details-tapclose','phone: with Details up, tapping the plan closes it',d0&&!!pt&&!d1,{open:d0,pt,after:d1});
+   const pulls={};for(const [slot,sel] of [['lib','#d-lib'],['draw','#msheet'],['insp','#d-insp']]){if(slot==='insp')await pick();await click(pg,`#mbar [data-m=${slot}]`);await pg.waitForTimeout(300);const o=await vis(sel);const b=await box(sel);await t.drag(b,[b[0],b[1]+170],10);await pg.waitForTimeout(400);pulls[slot]=[o,await vis(sel)]}
+   await click(pg,'#mbar [data-m=lib]');await pg.waitForTimeout(300);const sc=await ev(pg,()=>{const d=document.querySelector('#d-lib');const c=[d,...d.querySelectorAll('*')].find(e=>e.scrollHeight>e.clientHeight+40&&/(auto|scroll)/.test(getComputedStyle(e).overflowY));if(!c)return false;c.scrollTop=200;return c.scrollTop>0});
+   const b=await box('#d-lib');await t.drag(b,[b[0],b[1]+170],10);await pg.waitForTimeout(400);const stay=await vis('#d-lib');await click(pg,'#mbar [data-m=select]');await pg.waitForTimeout(200);
+   add(R,'p-sheet-pull','phone: pulling down from the middle of Library, Draw or Details closes it; a scrolled list scrolls instead',Object.values(pulls).every(([o,a])=>o&&!a)&&sc&&stay,{pulls,scrolled:sc,stillOpenWhenScrolled:stay})}
   add(R,'p-phone-clean','phone smoke left no console errors',e0()===0,pg.errs.slice(0,5));
   await pg.ctx.close();return R}
 
