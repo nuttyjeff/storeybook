@@ -1,0 +1,6 @@
+node_modules/
+out/
+deploy/
+test/release/out/
+test/detect/out/
+*.zip

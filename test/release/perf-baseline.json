@@ -1,0 +1,15 @@
+{
+ "version": "4.4.3",
+ "at": "2026-11-08T23:57:09.884Z",
+ "values": {
+  "load_ms": 201,
+  "sample_objs": 177,
+  "clash_ms": 0.42,
+  "planJSON_ms": 0.18,
+  "migRoom_ms": 0.038,
+  "build3d_ms": 2984,
+  "idle_renders_2s": 2,
+  "drawCalls": 862,
+  "triangles": 135424
+ }
+}

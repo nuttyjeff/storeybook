@@ -1,0 +1,86 @@
+name: Release gate
+
+# Run from the Actions tab: pick "small" for minor patches, "full" for new features and large changes.
+on:
+  workflow_dispatch:
+    inputs:
+      gate:
+        description: Which gate
+        type: choice
+        options: [small, full]
+        default: full
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.s.outputs.shards }}
+    steps:
+      - id: s
+        run: |
+          SMALL='[
+            {"name":"core","args":"--only=build,load,golden,smoke,detect,visual,deploy","files":"","dev":""},
+            {"name":"phone-3d-data","args":"--only=matrix","files":"phone2d,view3d,data","dev":""},
+            {"name":"tablet-views","args":"--only=matrix","files":"tablet-desktop,views-building","dev":""},
+            {"name":"objects-edit","args":"--only=matrix","files":"objects,edit-create","dev":""},
+            {"name":"shell","args":"--only=matrix","files":"shell","dev":""}
+          ]'
+          FULL='[
+            {"name":"robust","args":"--only=matrix","files":"robust","dev":""},
+            {"name":"layout-small-phones","args":"--only=matrix","files":"layout","dev":"^(se|13mini|w320)$"},
+            {"name":"layout-big-phones","args":"--only=matrix","files":"layout","dev":"^(15pm|px7|s8|13)$"},
+            {"name":"layout-ipads","args":"--only=matrix","files":"layout","dev":"^(ipmini|ip7|ipp11|ipp13)$"},
+            {"name":"layout-split-desktop","args":"--only=matrix","files":"layout","dev":"^(split678|split981|d1440|d1920|lap1280)$"},
+            {"name":"layout-other","args":"--only=matrix","files":"layout","dev":"^(?!(se|13mini|w320|15pm|px7|s8|13|ipmini|ip7|ipp11|ipp13|split678|split981|d1440|d1920|lap1280)$).*"}
+          ]'
+          if [ "${{ inputs.gate }}" = "full" ]; then
+            echo "shards=$(jq -c -n --argjson a "$SMALL" --argjson b "$FULL" '$a+$b')" >> "$GITHUB_OUTPUT"
+          else
+            echo "shards=$(jq -c -n --argjson a "$SMALL" '$a')" >> "$GITHUB_OUTPUT"
+          fi
+
+  gate:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJson(needs.plan.outputs.shards) }}
+    name: ${{ matrix.shard.name }}
+    env:
+      SB_OUT: ${{ github.workspace }}/out
+      SB_BASELINE: test/release/baseline-ci
+      MX_FILES: ${{ matrix.shard.files }}
+      MX_LY_DEV: ${{ matrix.shard.dev }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: mkdir -p out && node build.js
+      - name: Run gate part
+        run: node test/release/runner.mjs ${{ matrix.shard.args }}
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-${{ matrix.shard.name }}
+          path: |
+            test/release/out/
+            test/release/baseline-ci/
+          if-no-files-found: ignore
+
+  summary:
+    needs: gate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: results
+      - name: Combine results
+        run: node test/release/ci-summary.mjs results >> "$GITHUB_STEP_SUMMARY"

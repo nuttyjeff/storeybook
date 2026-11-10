@@ -1,0 +1,14 @@
+[
+ {"id":"re1","file":"re1.jpg","real":true,"mpp":34,"style":"estate-colour","note":"maroon solid walls on pink rooms, 309x600 jpg","expect":{"rooms":8,"doors":9}},
+ {"id":"re2","file":"re2.jpg","real":true,"mpp":36,"style":"estate-solid","note":"black solid walls, angled bay, 484x600 jpg","expect":{"rooms":9,"doors":9}},
+ {"id":"re3","file":"re3.jpg","real":true,"mpp":33,"style":"estate-solid","note":"black solid walls, chamfered corner, 395x600 jpg","expect":{"rooms":9,"doors":9}},
+ {"id":"re4","file":"re4.png","real":true,"mpp":12.5,"style":"estate-solid","note":"doors drawn as 45-degree lines, no arcs; bay window","expect":{"rooms":7,"doors":7}},
+ {"id":"cad1","file":"cad1.png","real":true,"mpp":16,"style":"cad-solid","note":"Swedish CAD export, solid black walls, text and furniture","expect":{"rooms":6,"doors":6}},
+ {"id":"cc1","file":"cc1.png","real":true,"mpp":25,"style":"cubicasa","note":"thick black walls, grey furniture, 650x488","expect":{"rooms":7,"doors":6}},
+ {"id":"scan1","file":"scan1.png","real":true,"mpp":19,"style":"scan","note":"scanned architect plan, hatched and solid walls, dims in cm, slight skew","expect":{"rooms":12,"doors":12}},
+ {"id":"mkt1","file":"mkt1.png","real":true,"mpp":50,"style":"marketing-light","note":"very light grey walls, tiny, lots of furniture","expect":{"rooms":12,"doors":10}},
+ {"id":"photo1","file":"photo1.jpg","real":true,"mpp":7,"style":"photo-sketch","note":"phone photo of a pen sketch, single lines, uneven light","expect":{"rooms":3,"doors":0}},
+ {"id":"rob1","file":"rob1.jpg","real":true,"mpp":12,"style":"robin","note":"ROBIN dataset, clean black walls, swings","expect":{"rooms":4,"doors":3}},
+ {"id":"rob2","file":"rob2.jpg","real":true,"mpp":12,"style":"robin","note":"ROBIN dataset","expect":{"rooms":4,"doors":4}},
+ {"id":"rob3","file":"rob3.jpg","real":true,"mpp":12,"style":"robin","note":"ROBIN dataset, 7 rooms","expect":{"rooms":7,"doors":7}}
+]

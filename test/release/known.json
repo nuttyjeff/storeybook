@@ -1,0 +1,17 @@
+[
+ {
+  "id": "^mx-ly-.*-(touch|plan|sh-[a-z]+-touch|sh-[a-z]+-plan|sh-lib-text|a11y-set-focus)$",
+  "row": 25,
+  "why": "phone design calls for Jeff: touch targets under 40 px, sheets covering more than 55% of a small phone, long library names cut off, focus after tapping outside Settings"
+ },
+ {
+  "id": "^mx-rb-fz-(ipad|iphone|desktop)-redo$",
+  "row": 26,
+  "why": "redo-all after a long random session that renames, closes and switches tabs does not land on the exact end plan (under investigation)"
+ },
+ {
+  "id": "^mx-rb-fl-huge-3d$",
+  "row": 27,
+  "why": "5,000-item plan takes over 10 s to build its 3D view"
+ }
+]
