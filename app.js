@@ -1261,7 +1261,7 @@ svg.addEventListener('pointerup',ev=>{
   if(d.m==='pan'){svg.style.cursor=tool==='pan'?'grab':(tool==='select'?'default':'crosshair');
     /* a tap on empty plan (finger barely moved) clears the selection, as a click does on desktop */
     if(tool==='select'&&!multiMode&&!lpFired&&Math.hypot(ev.clientX-d.sx,ev.clientY-d.sy)<8){if(sel.size||pinSel){sel.clear();pinSel=null;render();renderInspector()}
-      /* phones: a tap on the plan also puts the Details sheet away */if(PHONE()&&P.insp){P.insp=false;savePrefs();applyDrawers();mbarSync()}}
+      /* phones: a tap on the plan also puts any open sheet away (Details, Library, Draw, More) */if(PHONE()){if(P.insp||P.lib){P.insp=false;P.lib=false;savePrefs();applyDrawers()}if(msheetKind)msheet(null);mbarSync()}}
     return}
   if(d.m==='under'){markDirty();return}
   if(d.m==='sec'){markDirty();if(is3D)sectionApply();render();renderInspector();return}
