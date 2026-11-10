@@ -1260,7 +1260,8 @@ svg.addEventListener('pointerup',ev=>{
   if(!drag)return;const d=drag;drag=null;guideSVG='';if(d.m==='move'&&d.moved)clashDirty=true;
   if(d.m==='pan'){svg.style.cursor=tool==='pan'?'grab':(tool==='select'?'default':'crosshair');
     /* a tap on empty plan (finger barely moved) clears the selection, as a click does on desktop */
-    if(tool==='select'&&!multiMode&&!lpFired&&(sel.size||pinSel)&&Math.hypot(ev.clientX-d.sx,ev.clientY-d.sy)<8){sel.clear();pinSel=null;render();renderInspector()}
+    if(tool==='select'&&!multiMode&&!lpFired&&Math.hypot(ev.clientX-d.sx,ev.clientY-d.sy)<8){if(sel.size||pinSel){sel.clear();pinSel=null;render();renderInspector()}
+      /* phones: a tap on the plan also puts the Details sheet away */if(PHONE()&&P.insp){P.insp=false;savePrefs();applyDrawers();mbarSync()}}
     return}
   if(d.m==='under'){markDirty();return}
   if(d.m==='sec'){markDirty();if(is3D)sectionApply();render();renderInspector();return}
@@ -2751,6 +2752,21 @@ $$('.grab[data-close]').forEach(g=>{let y0=null,dr=null;const dw=()=>g.closest('
 document.addEventListener('click',e=>{const g=e.target.closest('.grab[data-close]');if(g){if(g.dataset.swiped)return;const id=g.dataset.close;if(id==='d-lib')P.lib=false;if(id==='d-insp')P.insp=false;savePrefs();applyDrawers();return}
   const a=e.target.closest('[data-mact]');if(a){const k=a.dataset.mact;if(k==='rot')rotateSel(90);else if(k==='dup')duplicateSel();else if(k==='del')deleteAction()}});
 window.addEventListener('resize',()=>mbarSync());
+/* phones: pull any sheet down to close it, from anywhere on it, not only the grab bar. A pull starts only when the
+   content under the finger is already scrolled to the top, so scrolling inside a sheet still works. */
+(function(){let st=null;
+  const sheetOf=t=>{if(!PHONE())return null;const d=t.closest('#d-insp,#d-lib,#msheet');return d&&!d.hidden?d:null};
+  const atTop=(t,d)=>{for(let e=t;e&&e!==d.parentElement;e=e.parentElement){if(e.scrollHeight>e.clientHeight+1&&e.scrollTop>0&&/(auto|scroll)/.test(getComputedStyle(e).overflowY))return false}return true};
+  const close=d=>{if(d.id==='msheet'){msheet(null);return}if(d.id==='d-lib')P.lib=false;if(d.id==='d-insp')P.insp=false;savePrefs();applyDrawers();mbarSync()};
+  document.addEventListener('touchstart',e=>{st=null;if(e.touches.length!==1)return;const t=e.target;/* a field being typed in, a slider or a picker keeps its own gestures; an unfocused field is just part of the sheet */if(t.closest('select,input[type=range],.grab')||(t.closest('input,textarea,[contenteditable=true]')&&t.closest('input,textarea,[contenteditable=true]')===document.activeElement))return;const d=sheetOf(t);if(!d)return;
+    const p=e.touches[0];st={d,t,x:p.clientX,y:p.clientY,on:false,top:atTop(t,d)}},{passive:true});
+  document.addEventListener('touchmove',e=>{if(!st)return;const p=e.touches[0],dx=p.clientX-st.x,dy=p.clientY-st.y;
+    if(!st.on){if(Math.abs(dy)<10&&Math.abs(dx)<10)return;if(!st.top||dy<=0||Math.abs(dx)>Math.abs(dy)){st=null;return}st.on=true;st.d.style.transition='none'}
+    e.preventDefault();const y=Math.max(0,dy);st.d.style.transform=`translateY(${y}px)`;st.d.style.opacity=String(Math.max(0.35,1-y/400))},{passive:false});
+  const end=e=>{if(!st)return;const s0=st;st=null;if(!s0.on)return;const p=(e.changedTouches&&e.changedTouches[0])||{clientY:s0.y};const dy=p.clientY-s0.y;
+    s0.d.style.transition='';s0.d.style.transform='';s0.d.style.opacity='';if(dy>70)close(s0.d);
+    /* the finger lifted over a button after a pull must not press it */const stop=ev=>{ev.stopPropagation();ev.preventDefault()};document.addEventListener('click',stop,{capture:true,once:true});setTimeout(()=>document.removeEventListener('click',stop,{capture:true}),400)};
+  document.addEventListener('touchend',end,{passive:true});document.addEventListener('touchcancel',end,{passive:true})})();
 $$('[data-close]').forEach(b=>b.addEventListener('click',()=>{P.lib=false;savePrefs();applyDrawers()}));
 function notice(title,lines,foot){const t=$('#toast');t.innerHTML=`<b>${esc(title)}</b>`+lines.map(l=>`<br>· ${esc(l)}`).join('')+(foot?`<br><span style="opacity:.8">${esc(foot)}</span>`:'');t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,9000)}
 let toastT=null;function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2600)}
