@@ -99,13 +99,13 @@ const catCls=c=>'cat-'+(CATS[c]||'custom');
 
 /* ================= state ================= */
 const PREF_DEF={wall3d:'full',grid:1000,snap:true,snapSize:50,osnap:true,ortho:true,dims:'sel',gaps:true,clear:true,clash:true,wall:150,theme:'system',fill:'solid',lbl:'name',inv:true,lib:true,insp:true,roadW:6000,fenceH:2400,paintCol:'#d9c7a7',paintFace:false,trunkW:150,trunkH:100};
-let P=Object.assign({},PREF_DEF);try{Object.assign(P,JSON.parse(store.get('osp-prefs')||'{}'))}catch(e){}
+let P=Object.assign({},PREF_DEF);try{Object.assign(P,JSON.parse(store.get('osk-prefs')||'{}'))}catch(e){}
 if(P.dims===true)P.dims='sel';if(P.dims===false)P.dims='off';
 if(!P.layers||typeof P.layers!=='object')P.layers={};if(!Array.isArray(P.hideCats))P.hideCats=[];
 if(P.clear===false)P.layers.zones=false;if(P.gaps===false)P.layers.gaps=false;if(P.dims==='off'){P.layers.walldims=false;P.dims='sel'}delete P.clear;delete P.gaps;
 const LY=k=>k==='secz'?P.layers.secz===true:P.layers[k]!==false;
-function visible(o){if(isSite(o))return LY('site');if(o.t==='room'||o.t==='wall')return LY('walls');if(o.t==='item')return isCeil(o)?LY('ceil'):(isCol(o)||isCore(o))?LY('walls'):isOpening(o)?LY('doors'):(LY('furn')&&!P.hideCats.includes(o.cat)&&!(o.setCat&&P.hideCats.includes(o.setCat)));if(o.t==='text')return LY('texts');if(o.t==='dim')return LY('measures');if(o.t==='trunk')return LY('ceil');return true}
-const savePrefs=()=>store.set('osp-prefs',JSON.stringify(P));
+function visible(o){if(typeof SU!=='undefined'&&SU&&SU.hidden.size&&SU.hidden.has(o.id))return false;if(isSite(o))return LY('site');if(o.t==='room'||o.t==='wall')return LY('walls');if(o.t==='item')return isCeil(o)?LY('ceil'):(isCol(o)||isCore(o))?LY('walls'):isOpening(o)?LY('doors'):(LY('furn')&&!P.hideCats.includes(o.cat)&&!(o.setCat&&P.hideCats.includes(o.setCat)));if(o.t==='text')return LY('texts');if(o.t==='dim')return LY('measures');if(o.t==='trunk')return LY('ceil');return true}
+const savePrefs=()=>store.set('osk-prefs',JSON.stringify(P));
 if(!P.det||typeof P.det!=='object')P.det={tmin:75,tmax:350,gap:1850,rooms:true};
 
 /* ================= versions and migrations =================
@@ -119,7 +119,7 @@ if(!P.det||typeof P.det!=='object')P.det={tmin:75,tmax:350,gap:1850,rooms:true};
    - anything this version does not understand (new object types, new fields) is kept and written back on save */
 const APP_VERSION='5.0.0',PLAN_V=6,LIB_V=11;
 /* numbered test builds handed over before a release: shown in the tab title and the More menu. Empty for a release. */
-const APP_TEST='test 32';
+const APP_TEST='test 12',APP_FORK='sketchup';
 const KNOWN_T=['room','wall','item','text','dim','trunk'];
 /* v1 rack clearances were service aisles; v2 stores door leaf widths */
 const OLD_RACK={RK6010:[1200,1000],RK6012:[1200,1000],RK8010:[1200,1000],IRC3012:[1200,1000],UPS6085:[1000,600],WMC6045:[900,0]};
@@ -181,7 +181,7 @@ function normObj(o,seen){
   return n;
 }
 /* any saved plan, any version -> current in-memory plan */
-const NAME_MAX=120;const PLAN_KEYS=['axes','app','appVersion','v','name','objs','extraObjs','underlay','locked','bld','north','pid','pins','snaps','revs','notes','style','section','fire','cost','brief','prog','site','saved'];
+const NAME_MAX=120;const PLAN_KEYS=['comps','scenes','guides','axes','app','appVersion','v','name','objs','extraObjs','underlay','locked','bld','north','pid','pins','snaps','revs','notes','style','section','fire','cost','brief','prog','site','saved'];
 /* is this value nested deeper than d levels? (no recursion, so a hostile file cannot exhaust the stack) */
 function tooDeep(v,d){let cur=[v];for(let i=0;i<=d;i++){const nx=[];for(const x of cur){if(x&&typeof x==='object')for(const k in x){const y=x[k];if(y&&typeof y==='object')nx.push(y)}}if(!nx.length)return false;cur=nx}return true}
 function migratePlan(raw){
@@ -197,7 +197,7 @@ function migratePlan(raw){
   if(bad)notes.push(`${bad} damaged ${bad===1?'object was':'objects were'} skipped`);
   const out=Object.assign({},p,{v:Math.max(fileV,PLAN_V),name:String(p.name||'Untitled plan').slice(0,NAME_MAX),objs,underlay:u,locked:!!p.locked});
   /* parts that must be lists or text: anything else is dropped, with a note */
-  {const dropped=[];['pins','snaps','revs'].forEach(k=>{if(out[k]!=null&&!Array.isArray(out[k])){delete out[k];dropped.push(k)}else if(Array.isArray(out[k]))out[k]=out[k].filter(x=>x&&typeof x==='object')});if(out.notes!=null&&typeof out.notes!=='string'){delete out.notes;dropped.push('notes')}
+  {const dropped=[];if(out.guides!=null){if(!Array.isArray(out.guides)){delete out.guides;dropped.push('guides')}else out.guides=out.guides.filter(g=>g&&Array.isArray(g.a)&&Array.isArray(g.b)&&[g.a[0],g.a[1],g.b[0],g.b[1]].every(v=>typeof v==='number'&&isFinite(v)&&Math.abs(v)<=1e7)).map(g=>({a:[g.a[0],g.a[1]],b:[g.b[0],g.b[1]]}))}if(out.comps!=null){if(typeof out.comps!=='object'||Array.isArray(out.comps)){delete out.comps;dropped.push('comps')}else{const c2={};Object.keys(out.comps).slice(0,2000).forEach(k=>{const c=out.comps[k];if(c&&typeof c==='object'&&Array.isArray(c.objs))c2[k]={name:String(c.name||'Component').slice(0,60),objs:c.objs.filter(x=>x&&typeof x==='object'&&typeof x.t==='string').slice(0,5000)}});if(Object.keys(c2).length)out.comps=c2;else delete out.comps}}if(out.scenes!=null){if(!Array.isArray(out.scenes)){delete out.scenes;dropped.push('scenes')}else out.scenes=out.scenes.filter(c=>c&&typeof c==='object'&&c.v&&[c.v.x,c.v.y,c.v.k].every(v=>typeof v==='number'&&isFinite(v))).slice(0,100).map(c=>{const n={name:String(c.name||'Scene').slice(0,60),v:{x:c.v.x,y:c.v.y,k:c.v.k},d3:!!c.d3};if(c.cam&&Array.isArray(c.cam.p)&&Array.isArray(c.cam.t)&&c.cam.p.concat(c.cam.t).every(v=>typeof v==='number'&&isFinite(v)))n.cam={p:c.cam.p.slice(0,3),t:c.cam.t.slice(0,3),fov:+c.cam.fov||50};if(c.par)n.par=true;if(c.xray)n.xray=true;if(Array.isArray(c.hidden))n.hidden=c.hidden.filter(x=>typeof x==='string').slice(0,20000);return n})}['pins','snaps','revs'].forEach(k=>{if(out[k]!=null&&!Array.isArray(out[k])){delete out[k];dropped.push(k)}else if(Array.isArray(out[k]))out[k]=out[k].filter(x=>x&&typeof x==='object')});if(out.notes!=null&&typeof out.notes!=='string'){delete out.notes;dropped.push('notes')}
     const known=new Set(PLAN_KEYS);Object.keys(out).forEach(k=>{if(!known.has(k)&&out[k]&&typeof out[k]==='object'&&tooDeep(out[k],12)){delete out[k];dropped.push(k)}});
     if(dropped.length)notes.push(`${dropped.length} damaged ${dropped.length===1?'part':'parts'} of the file (${dropped.join(', ')}) ${dropped.length===1?'was':'were'} left out`)}
   if(extra.length)out.extraObjs=extra;else delete out.extraObjs;
@@ -248,12 +248,12 @@ function syncFloorIn(plan){ensureBld(plan);const b=plan.bld,l=bldLevel(plan);con
 function activeStored(){const b=S.bld,l=bldLevel(S);const base=clone(l.unique?(l.base||[]):(b.typical||[]));const nm=l.unique?{}:(l.names||{});base.forEach(o=>{if(o.t==='room'&&nm[o.id]!=null)o.name=nm[o.id]});return base.concat(clone(coresOn(b,b.levels.indexOf(l))),l.fit||[])}
 
 let LIB;const libNotes=[];
-try{LIB=libFromCSV(store.get('osp-lib')||DEFAULT_LIB_CSV)}catch(e){LIB=libFromCSV(DEFAULT_LIB_CSV)}
-{const saved=store.get('osp-lib');let lv=saved?Math.floor(num(store.get('osp-lib-v'),1)):LIB_V;
-  /* the first build with sets marked its upgrade with osp-sets-added; it still needs the later steps, which are safe to rerun */
+try{LIB=libFromCSV(store.get('osk-lib')||DEFAULT_LIB_CSV)}catch(e){LIB=libFromCSV(DEFAULT_LIB_CSV)}
+{const saved=store.get('osk-lib');let lv=saved?Math.floor(num(store.get('osk-lib-v'),1)):LIB_V;
+  /* the first build with sets marked its upgrade with osk-sets-added; it still needs the later steps, which are safe to rerun */
   while(lv<LIB_V){try{if(LIB_STEPS[lv])LIB_STEPS[lv](LIB,libNotes)}catch(e){console.error(e)}lv++}
-  if(saved)store.set('osp-lib',libToCSV(LIB));store.set('osp-lib-v',String(LIB_V))}
-const saveLib=()=>{store.set('osp-lib',libToCSV(LIB));store.set('osp-lib-v',String(LIB_V))};
+  if(saved)store.set('osk-lib',libToCSV(LIB));store.set('osk-lib-v',String(LIB_V))}
+const saveLib=()=>{store.set('osk-lib',libToCSV(LIB));store.set('osk-lib-v',String(LIB_V))};
 
 const blankPlan=()=>({v:PLAN_V,name:'Untitled plan',objs:[],underlay:null,locked:false,north:0,pid:uid()});
 let S=blankPlan();
@@ -266,7 +266,7 @@ const byId=id=>S.objs.find(o=>o.id===id);
 let past=[],future=[];
 function snapState(){
   const u=S.underlay?Object.assign({},S.underlay,{src:null}):null;
-  return JSON.stringify({objs:S.objs,locked:S.locked,name:S.name,north:num(S.north,0),u,style:S.style||null,section:S.section||null,fire:S.fire||null,notes:S.notes||'',pins:S.pins||[],bld:S.bld||null,cost:S.cost||null,brief:S.brief||null,prog:S.prog||null,site:S.site||null,axes:S.axes||0,roof:!!roofMode});
+  return JSON.stringify({objs:S.objs,locked:S.locked,name:S.name,north:num(S.north,0),u,style:S.style||null,section:S.section||null,fire:S.fire||null,notes:S.notes||'',pins:S.pins||[],bld:S.bld||null,cost:S.cost||null,brief:S.brief||null,prog:S.prog||null,site:S.site||null,axes:S.axes||0,guides:S.guides||[],scenes:S.scenes||[],comps:S.comps||null,roof:!!roofMode});
 }
 /* undo history is bounded by total bytes, not a fixed count — effectively unlimited for a normal session without unbounded memory growth */
 let pastBytes=0;const UNDO_BUDGET=96*1024*1024;
@@ -279,6 +279,9 @@ function restoreState(str){
   S.style=o.style||undefined;S.section=o.section||undefined;S.fire=o.fire||undefined;S.notes=o.notes||'';S.pins=o.pins||[];if(o.bld)S.bld=o.bld;S.cost=o.cost||undefined;S.brief=o.brief||undefined;S.prog=o.prog||undefined;try{progUI()}catch(e){}pinSel=null;
   /* the building's place on the campus site is part of the plan, so Undo takes it back too (steps saved before 5.0.0 test 23 have no site key and leave it alone) */
   if('axes' in o){if(o.axes)S.axes=o.axes;else delete S.axes;try{axesUI()}catch(e){}}
+  if('guides' in o){if(Array.isArray(o.guides)&&o.guides.length)S.guides=o.guides;else delete S.guides}
+  if('comps' in o){if(o.comps&&Object.keys(o.comps).length)S.comps=o.comps;else delete S.comps}
+  if('scenes' in o){if(Array.isArray(o.scenes)&&o.scenes.length)S.scenes=o.scenes;else delete S.scenes;try{suScenesBar()}catch(e){}}
   if('site' in o){S.site=o.site||undefined;try{campusUI();if(bldView&&BV.campus)buildBld3D()}catch(e){}}
   if(toRoof!==wasRoof){roofMode=toRoof;try{roofRefObjs=toRoof?bldObjs(topLevel()).filter(q=>(q.t==='wall'&&!q.site)||q.t==='room'):[]}catch(e){roofRefObjs=[]}if(toRoof&&is3D)bldView=true;sel.clear();clashDirty=true}
   {const nowFloor=S.bld?S.bld.active:null;if(toRoof!==wasRoof||(!toRoof&&nowFloor!==wasFloor)){sel.clear();clashDirty=true;try{const nm=levelNames(S.bld);toast(toRoof?'Back on the roof, where that change was made':`Back on ${nm[nowFloor]||'that floor'}, where that change was made`)}catch(e){}}}
@@ -297,14 +300,14 @@ let asT=null;
 /* each save is tied to the tab it came from, so switching tabs mid-way can never write one plan over another */
 /* autosave: every change is written to this browser's local storage (not the cache) about half a second later, one entry per tab.
    Returns 'full', 'lite' (saved without the drawing, which did not fit) or false (nothing saved) */
-function saveTabData(t,plan){try{syncFloorOut(plan)}catch(e){console.error(e)}PLANS.put(plan);const key=t?'osp-tab-'+t.id:'osp-plan';const txt=JSON.stringify(plan);if(store.set(key,txt))return'full';
+function saveTabData(t,plan){try{syncFloorOut(plan)}catch(e){console.error(e)}PLANS.put(plan);const key=t?'osk-tab-'+t.id:'osk-plan';const txt=JSON.stringify(plan);if(store.set(key,txt))return'full';
   if(plan.underlay&&plan.underlay.src&&store.set(key,JSON.stringify(Object.assign({},plan,{underlay:Object.assign({},plan.underlay,{src:null})}))))return'lite';return false}
 const AS={state:'idle',at:0,fileAt:0,fileNote:''};
 function autosave(){clearTimeout(asT);const t=curTab,plan=S;AS.state='pending';setStatus();asT=setTimeout(()=>{/* an AI preview that has not been accepted is not autosaved: the plan as it was before is */const r=saveTabData(t,t===curTab&&AI.pending?AI.pending.pre.S:plan);if(t===curTab){AS.state=r||'fail';AS.at=Date.now();
     /* say it once when the browser stops taking autosaves (My plans in IndexedDB still keeps a copy) */
     if(AS.state==='fail'&&!AS.warned){AS.warned=true;toast('Browser storage is full: this plan is no longer autosaved here. My plans still keeps a copy; Save to a file to be safe.')}else if(AS.state!=='fail')AS.warned=false}setStatus()},600)}
 const ago=t=>{const d=Math.round((Date.now()-t)/1000);return d<5?'just now':d<60?d+' s ago':d<3600?Math.round(d/60)+' min ago':new Date(t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};
-function storageUse(){let n=0;try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('osp-'))n+=(localStorage.getItem(k)||'').length+k.length}}catch(e){}return n*2}
+function storageUse(){let n=0;try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('osk-'))n+=(localStorage.getItem(k)||'').length+k.length}}catch(e){}return n*2}
 function setStatus(){if(typeof tabs!=='undefined'&&tabs&&tabs.length)renderTabs();
   const el=$('#status');const st=AS.state;
   el.className='status '+(st==='pending'?'pending':st==='fail'?'bad':st==='lite'?'dirty':'saved');
@@ -323,7 +326,7 @@ function renderSavePop(){const kb=Math.round(storageUse()/1024),pct=Math.min(100
   <div class="meter"><i style="width:${pct}%"></i></div><p class="muted" style="margin:4px 0 8px">Browser storage used: ${kb.toLocaleString()} KB of about 5,000 KB${st==='lite'?'. <b>The drawing did not fit</b>: the plan is autosaved, but load the drawing again next time, or save to a file':''}${st==='fail'?'. <b>Autosave is failing</b>: save to a file now':''}</p>
   <div class="row"><button class="btn sm primary" type="button" data-sv="save">Save to a file</button><button class="btn sm ghost" type="button" data-sv="wipe">Clear data in this browser…</button></div>`}
 function wipeLocal(){if(!confirm('Remove everything StoreyBook keeps in this browser?\n\n· autosaved plans for every tab\n· your settings\n· your library changes\n\nPlan files you saved are not touched. Save any open plan you want to keep first.'))return;
-  store.off=true;clearTimeout(asT);try{const ks=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('osp-'))ks.push(k)}ks.forEach(k=>localStorage.removeItem(k))}catch(e){}
+  store.off=true;clearTimeout(asT);try{const ks=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('osk-'))ks.push(k)}ks.forEach(k=>localStorage.removeItem(k))}catch(e){}
   PLANS.clear().finally(()=>{toast('Cleared. Reloading…');setTimeout(()=>location.reload(),600)})}
 
 /* ================= geometry ================= */
@@ -487,7 +490,7 @@ function northSVG(cx,cy,r,n){/* arrow for exports, in world units */
   w.addEventListener('dblclick',()=>setNorth(0));})();
 function toWorld(ev){const r=svg.getBoundingClientRect();return[V.x+(ev.clientX-r.left)/V.k,V.y+(ev.clientY-r.top)/V.k]}
 function zoomAt(f,sx,sy){/* 0.0002 shows about 7 km across a desktop screen (was 700 m, too little for a 70,000 m² floor) */const nk=Math.max(0.0002,Math.min(2,V.k*f));const wx=V.x+sx/V.k,wy=V.y+sy/V.k;V.k=nk;V.x=wx-sx/nk;V.y=wy-sy/nk;applyView();render()}
-function fit(){
+function fit(){if(typeof SU!=='undefined'&&SU)suPushView();
   const pts=[];S.objs.forEach(o=>{const b=objBox(o);pts.push([b.x0,b.y0],[b.x1,b.y1])});
   if(S.underlay&&S.underlay.src&&S.underlay.visible!==false){const u=S.underlay;pts.push([u.x,u.y],[u.x+u.w*u.mpp,u.y+u.h*u.mpp])}
   if(!pts.length){V.k=0.04;V.x=-2000;V.y=-2000;applyView();render();return}
@@ -498,7 +501,7 @@ function fit(){
 }
 
 /* zoom to one box, keeping it clear of the drawers and the AI panel */
-function fitBox(b){const ai=$('#ai-panel')&&!$('#ai-panel').hidden&&!PHONE()?420:0,padL=(P.lib&&!PHONE()?310:20),padR=Math.max(P.insp&&!PHONE()?330:20,ai),padT=70,padB=110,aw=Math.max(100,W-padL-padR),ah=Math.max(100,H-padT-padB);V.k=Math.min(aw/Math.max(1,b.x1-b.x0),ah/Math.max(1,b.y1-b.y0),1);V.x=b.x0-(padL+(aw-(b.x1-b.x0)*V.k)/2)/V.k;V.y=b.y0-(padT+(ah-(b.y1-b.y0)*V.k)/2)/V.k;applyView();render()}
+function fitBox(b){if(typeof SU!=='undefined'&&SU)suPushView();const ai=$('#ai-panel')&&!$('#ai-panel').hidden&&!PHONE()?420:0,padL=(P.lib&&!PHONE()?310:20),padR=Math.max(P.insp&&!PHONE()?330:20,ai),padT=70,padB=110,aw=Math.max(100,W-padL-padR),ah=Math.max(100,H-padT-padB);V.k=Math.min(aw/Math.max(1,b.x1-b.x0),ah/Math.max(1,b.y1-b.y0),1);V.x=b.x0-(padL+(aw-(b.x1-b.x0)*V.k)/2)/V.k;V.y=b.y0-(padT+(ah-(b.y1-b.y0)*V.k)/2)/V.k;applyView();render()}
 function centerOn(px,py){V.x=px-(W/2)/V.k;V.y=py-(H/2)/V.k;applyView();render()}
 /* ================= rendering ================= */
 let renderQ=false;
@@ -666,7 +669,7 @@ function drawOverlay(){
   if(list.length>1){const b=unionBox(list);const p=fs(6);s+=`<rect class="selbox" x="${b.x0-p}" y="${b.y0-p}" width="${b.x1-b.x0+2*p}" height="${b.y1-b.y0+2*p}"/>`}
   if(LY('gaps')&&list.length&&list.every(o=>o.t==='item'))s+=gapsSVG(list);
   if(list.length===1&&list[0].t==='item'){const o=list[0],b=objBox(o);s+=`<text class="dimtx" font-size="${fs(11)}" stroke-width="${fs(3)}" x="${(b.x0+b.x1)/2}" y="${b.y1+fs(16)}" text-anchor="middle">${fmt(o.w)} × ${fmt(o.d)}</text>`}
-  s+=liveSVG()+guideSVG;
+  s+=liveSVG()+guideSVG+(typeof SU!=='undefined'&&SU?suSVG():'');
   $('#L-over').innerHTML=s;
   {const lc=$('#L-cmp');if(lc)lc.innerHTML=cmp?cmpSVG():'';const lg=$('#cmp-legend');if(lg){lg.hidden=!cmp;if(cmp)lg.innerHTML=`<b>vs ${esc(cmp.name)}</b><span class="cl g"></span>added<span class="cl a"></span>changed<span class="cl r"></span>removed<button type="button" id="cmp-cl" class="cmp-cl${P.clouds?' on':''}" aria-pressed="${!!P.clouds}" title="Draw revision clouds round the changes">☁ Clouds${P.clouds?` △${cmpRevNo()}`:''}</button><button type="button" id="cmp-x" title="Exit compare">✕</button>`}}
 }
@@ -1052,7 +1055,7 @@ function setUnder(src,w,h,name,page,mpp,sc){
 }
 
 /* styles for the Campus map, the template dialog and the PV rows live here, not in the page head, to keep the first-load page inside its size budget */
-(()=>{const st=document.createElement('style');st.textContent=`#rot-chip{position:absolute;z-index:12;display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:4px 6px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.18)}#rot-chip[hidden]{display:none}#rot-chip input{width:64px;font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}@media (pointer:coarse){#rot-chip input{font-size:16px;width:72px}}.roth{cursor:grab;pointer-events:all}.roth circle{fill:var(--panel);stroke:var(--accent);stroke-width:2px;vector-effect:non-scaling-stroke}.roth path{stroke:var(--accent);stroke-width:1.6px;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}.roth .hit{fill:transparent!important;stroke:none!important}.roth:hover circle:not(.hit){fill:var(--accent)}.roth:hover path{stroke:#fff}.rotl{stroke:var(--accent);stroke-dasharray:3 3;stroke-width:1px;vector-effect:non-scaling-stroke;pointer-events:none}.rotc{fill:var(--accent);pointer-events:none}.v3bar::-webkit-scrollbar{display:none}.v3bar>*{flex:none}@media (min-width:821px){#main:has(.drawer.left:not([hidden])) .v3bar{--bl:calc(max(12px,env(safe-area-inset-left,0px)) + 262px);left:var(--bl);max-width:calc(100% - var(--bl,12px) - var(--br,12px))}#main:has(.drawer.right:not([hidden])) .v3bar{--br:calc(max(12px,env(safe-area-inset-right,0px)) + 292px);right:var(--br);max-width:calc(100% - var(--bl,12px) - var(--br,12px))}}@media (min-width:1101px){#main:has(.drawer.left:not([hidden])) .v3bar{--bl:calc(max(12px,env(safe-area-inset-left,0px)) + 302px)}#main:has(.drawer.right:not([hidden])) .v3bar{--br:calc(max(12px,env(safe-area-inset-right,0px)) + 322px)}}@media (max-width:820px),(pointer:coarse) and (max-height:500px){#main .v3bar{width:auto;max-width:none;margin:0}}.pname input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}.tabs [hidden]{display:none!important}@media (min-width:821px){#d-insp .tabs{padding:6px 4px}#d-insp .tabs button{padding:6px 2px}}.camp-map{display:block;width:100%;height:320px;border:1px solid var(--line);border-radius:8px;background:var(--bg);touch-action:pan-y;user-select:none;-webkit-user-select:none}.camp-map [data-cb]{touch-action:none}.camp-map:focus-visible{outline:2px solid var(--accent);outline-offset:1px}.camp-map g[data-cb]{cursor:grab}.camp-map g[data-cb] polygon{fill:var(--panel);stroke:var(--ink)}.camp-map g.sel polygon{stroke:var(--accent);fill:color-mix(in srgb,var(--accent) 14%,var(--panel))}.camp-map g.over polygon{stroke:#c0392b;stroke-dasharray:4 3}.camp-map text{fill:var(--ink);pointer-events:none;font-family:inherit}.camp-map text.sub{fill:var(--muted)}.camp-map .lk{fill:var(--accent);opacity:.55}.camp-map .bar line{stroke:var(--muted)}.camp-map .bar text{fill:var(--muted)}.pv-row{display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.4}.pv-row .mk{flex:none;width:16px;font-weight:700}.pv-row.ok .mk{color:#1f9d55}.pv-row.bad .mk{color:var(--danger)}.pv-row.na .mk{color:var(--muted)}.tpl-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}@media (max-width:700px){.tpl-grid{grid-template-columns:minmax(0,1fr)}}.tpl-prev{max-width:100%;height:auto;display:block}.tpl-prev .rm{fill:var(--bg);stroke:var(--ink);stroke-width:2}.tpl-prev .rk{fill:var(--accent);opacity:.75;stroke:var(--panel);stroke-width:.5}.tpl-prev .cu{fill:#2a9d8f;opacity:.8}`;document.head.appendChild(st)})();
+(()=>{const st=document.createElement('style');st.textContent=`.sulab{font-weight:500;pointer-events:none}#su-outliner .ol-row{display:flex;gap:8px;width:100%;text-align:left;border:0;background:none;color:var(--fg);padding:6px 8px;border-radius:6px;cursor:pointer;font:inherit}#su-outliner .ol-row:hover{background:rgba(0,0,0,.06)}#su-outliner .ol-row .muted{margin-left:auto}.su-fade{opacity:.22;pointer-events:none}#su-scenes{position:absolute;left:50%;transform:translateX(-50%);top:8px;z-index:8;display:flex;gap:4px;align-items:center;max-width:60%;overflow-x:auto;scrollbar-width:none;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:3px}#su-scenes[hidden]{display:none}#su-scenes .sc{display:flex;align-items:center;border-radius:6px}#su-scenes .sc.on{background:var(--accent-soft,rgba(0,0,0,.08))}#su-scenes button{border:0;background:none;color:var(--fg);font:inherit;font-size:12px;padding:4px 8px;cursor:pointer;white-space:nowrap;border-radius:6px}#su-scenes button:hover{background:rgba(0,0,0,.06)}#su-scenes .x{padding:4px 5px;color:var(--muted)}#su-scenes .add{font-weight:500;padding:4px 9px}.suguide{stroke:#7a8794;stroke-dasharray:8 6;stroke-width:1px;vector-effect:non-scaling-stroke;pointer-events:none}#su-chip{position:absolute;right:12px;bottom:56px;z-index:12;display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:4px 6px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.18)}#su-chip[hidden]{display:none}#su-chip input{width:72px;font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}#rot-chip{position:absolute;z-index:12;display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:4px 6px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.18)}#rot-chip[hidden]{display:none}#rot-chip input{width:64px;font:inherit;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}@media (pointer:coarse){#rot-chip input{font-size:16px;width:72px}}.roth{cursor:grab;pointer-events:all}.roth circle{fill:var(--panel);stroke:var(--accent);stroke-width:2px;vector-effect:non-scaling-stroke}.roth path{stroke:var(--accent);stroke-width:1.6px;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}.roth .hit{fill:transparent!important;stroke:none!important}.roth:hover circle:not(.hit){fill:var(--accent)}.roth:hover path{stroke:#fff}.rotl{stroke:var(--accent);stroke-dasharray:3 3;stroke-width:1px;vector-effect:non-scaling-stroke;pointer-events:none}.rotc{fill:var(--accent);pointer-events:none}.v3bar::-webkit-scrollbar{display:none}.v3bar>*{flex:none}@media (min-width:821px){#main:has(.drawer.left:not([hidden])) .v3bar{--bl:calc(max(12px,env(safe-area-inset-left,0px)) + 262px);left:var(--bl);max-width:calc(100% - var(--bl,12px) - var(--br,12px))}#main:has(.drawer.right:not([hidden])) .v3bar{--br:calc(max(12px,env(safe-area-inset-right,0px)) + 292px);right:var(--br);max-width:calc(100% - var(--bl,12px) - var(--br,12px))}}@media (min-width:1101px){#main:has(.drawer.left:not([hidden])) .v3bar{--bl:calc(max(12px,env(safe-area-inset-left,0px)) + 302px)}#main:has(.drawer.right:not([hidden])) .v3bar{--br:calc(max(12px,env(safe-area-inset-right,0px)) + 322px)}}@media (max-width:820px),(pointer:coarse) and (max-height:500px){#main .v3bar{width:auto;max-width:none;margin:0}}.pname input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}.tabs [hidden]{display:none!important}@media (min-width:821px){#d-insp .tabs{padding:6px 4px}#d-insp .tabs button{padding:6px 2px}}.camp-map{display:block;width:100%;height:320px;border:1px solid var(--line);border-radius:8px;background:var(--bg);touch-action:pan-y;user-select:none;-webkit-user-select:none}.camp-map [data-cb]{touch-action:none}.camp-map:focus-visible{outline:2px solid var(--accent);outline-offset:1px}.camp-map g[data-cb]{cursor:grab}.camp-map g[data-cb] polygon{fill:var(--panel);stroke:var(--ink)}.camp-map g.sel polygon{stroke:var(--accent);fill:color-mix(in srgb,var(--accent) 14%,var(--panel))}.camp-map g.over polygon{stroke:#c0392b;stroke-dasharray:4 3}.camp-map text{fill:var(--ink);pointer-events:none;font-family:inherit}.camp-map text.sub{fill:var(--muted)}.camp-map .lk{fill:var(--accent);opacity:.55}.camp-map .bar line{stroke:var(--muted)}.camp-map .bar text{fill:var(--muted)}.pv-row{display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.4}.pv-row .mk{flex:none;width:16px;font-weight:700}.pv-row.ok .mk{color:#1f9d55}.pv-row.bad .mk{color:var(--danger)}.pv-row.na .mk{color:var(--muted)}.tpl-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}@media (max-width:700px){.tpl-grid{grid-template-columns:minmax(0,1fr)}}.tpl-prev{max-width:100%;height:auto;display:block}.tpl-prev .rm{fill:var(--bg);stroke:var(--ink);stroke-width:2}.tpl-prev .rk{fill:var(--accent);opacity:.75;stroke:var(--panel);stroke-width:.5}.tpl-prev .cu{fill:#2a9d8f;opacity:.8}`;document.head.appendChild(st)})();
 /* ================= room templates =================
    A room template is a room that knows its contents. Sized templates (TPL) are generated from inputs and can be regenerated
    when the inputs change; saved templates (UTPL) are a room and its items stored as drawn. The room carries `tpl:{code,p}`
@@ -1066,7 +1069,7 @@ const TPL={DH:{code:'DH',name:'Data hall',disc:'IT',sub:'sized from racks and kW
   {k:'mode',l:'Where the cooling units stand',d:'wall',opts:[['wall','Along the end walls'],['row','In the rows, between racks']]},
   {k:'ckw',l:'Capacity of one cooling unit (kW)',d:50,min:5,max:200,note:'bigger units are fewer'},{k:'cred',l:'Spare cooling units',d:1,min:0,max:10,int:1}],
   build:dhBuild}};
-let UTPL=[];try{const u=JSON.parse(store.get('osp-rtpl')||'[]');if(Array.isArray(u))UTPL=u.filter(t=>t&&t.code&&Array.isArray(t.pts)&&Array.isArray(t.items))}catch(e){UTPL=[]}
+let UTPL=[];try{const u=JSON.parse(store.get('osk-rtpl')||'[]');if(Array.isArray(u))UTPL=u.filter(t=>t&&t.code&&Array.isArray(t.pts)&&Array.isArray(t.items))}catch(e){UTPL=[]}
 const tplAll=()=>Object.values(TPL).concat(UTPL),tplGet=c=>TPL[c]||UTPL.find(t=>t.code===c);
 /* saved room templates live in this browser only, so they can be written to a file and read back on another machine */
 const tplOk=t=>t&&typeof t==='object'&&typeof t.code==='string'&&typeof t.name==='string'&&Array.isArray(t.pts)&&t.pts.length>=3&&t.pts.every(isPair)&&Array.isArray(t.items)&&t.items.length<=DH_MAX;
@@ -1074,7 +1077,7 @@ function tplExport(){if(!UTPL.length)return toast('No saved room templates yet. 
 function tplImportText(text,fname){let o;try{o=JSON.parse(text)}catch(e){return toast(`Could not read ${fname||'the file'}: it is not valid JSON`)}
   if(!o||o.app!=='storeybook-room-templates'||!Array.isArray(o.templates))return toast(`${fname||'The file'} is not a room templates file. Export one from the command search: Room templates: save mine to a file`);
   let add=0,rep=0,bad=0;o.templates.forEach(t=>{if(!tplOk(t)){bad++;return}const n=clone(t),seen=new Set(),bb=bboxPts(n.pts);n.items=n.items.map(i=>normObj(Object.assign({},i,{t:'item'}),seen)).filter(i=>i&&i!=='unknown').map(i=>{delete i.id;delete i.tp;return i});n.name=String(n.name).slice(0,60);n.user=true;n.disc=DISC.includes(n.disc)?n.disc:'Architecture';n.w=Math.round(bb.x1-bb.x0);n.h=Math.round(bb.y1-bb.y0);const i=UTPL.findIndex(x=>x.code===n.code);if(i>=0){UTPL[i]=n;rep++}else{UTPL.push(n);add++}});
-  if(add||rep){store.set('osp-rtpl',JSON.stringify(UTPL));renderLib()}toast(add||rep?`Room templates: ${add} added${rep?', '+rep+' replaced':''}${bad?', '+bad+' damaged and skipped':''}`:'No usable room templates in that file')}
+  if(add||rep){store.set('osk-rtpl',JSON.stringify(UTPL));renderLib()}toast(add||rep?`Room templates: ${add} added${rep?', '+rep+' replaced':''}${bad?', '+bad+' damaged and skipped':''}`:'No usable room templates in that file')}
 function tplImport(){const f=document.createElement('input');f.type='file';f.accept='.json,application/json';f.onchange=()=>{const x=f.files[0];if(x)x.text().then(t=>tplImportText(t,x.name)).catch(()=>toast('Could not read that file'))};f.click()}
 /* Data hall sizing. Racks stand side by side in rows; the clear width applies in front of, behind and at both ends of every row.
    Rows face each other in pairs (cold aisle, then hot aisle). Cooling load is taken as the IT load; units stand along the end
@@ -1136,7 +1139,7 @@ function tplSave(room,name,disc){name=String(name||room.name||'Room').trim().sli
   const inside=o=>o.t==='item'&&(o.tp===room.id||pointInPoly(o.x,o.y,room.pts)||(isOpening(o)&&o.x>b.x0-w&&o.x<b.x1+w&&o.y>b.y0-w&&o.y<b.y1+w));
   const items=S.objs.filter(inside).map(o=>{const c=clone(o);delete c.id;delete c.tp;c.x=Math.round(c.x-b.x0);c.y=Math.round(c.y-b.y0);return c});
   const t={code:'RT'+Date.now().toString(36).toUpperCase(),name,disc,user:true,w:Math.round(b.x1-b.x0),h:Math.round(b.y1-b.y0),pts:room.pts.map(a=>[Math.round(a[0]-b.x0),Math.round(a[1]-b.y0)]),items};
-  UTPL.push(t);store.set('osp-rtpl',JSON.stringify(UTPL));renderLib();toast(`Saved "${name}" under ${disc} › Room templates (${items.length} items)`);return t}
+  UTPL.push(t);store.set('osk-rtpl',JSON.stringify(UTPL));renderLib();toast(`Saved "${name}" under ${disc} › Room templates (${items.length} items)`);return t}
 function tplRoomHTML(o){const t=o.tpl&&TPL[o.tpl.code];
   return`<div class="sec">Room template</div>${t?`<p class="muted" style="margin:2px 0 6px">Made from the ${esc(t.name)} template${o.tpl.p&&o.tpl.p.n?` · ${o.tpl.p.n} racks`:''}.</p><div class="row"><button class="btn sm primary" type="button" data-act="tpledit">Change ${esc(t.what||'template')} inputs…</button></div>`:''}
   <div class="fld" style="margin-top:6px"><label class="full">Save this room and its contents as a template<input id="rt-name" value="${esc(o.name)}" maxlength="60" aria-label="Template name"></label><label>Discipline<select id="rt-disc">${DISC.filter(d=>d!=='Custom').map(d=>`<option${d===(t?t.disc:'Architecture')?' selected':''}>${esc(d)}</option>`).join('')}</select></label><span style="align-self:end"><button class="btn sm" type="button" data-act="tplsave">Save template</button></span></div>`}
@@ -1157,7 +1160,7 @@ function tplSum(){const t=tplGet(TPLD.code),el=$('#tpl-sum');if(!t||!t.build||!e
 (()=>{const m=$('#tpl-modal');if(!m)return;m.addEventListener('input',e=>{if(e.target.dataset.tf)tplSum()});m.addEventListener('change',e=>{if(e.target.dataset.tf)tplSum()});
   m.addEventListener('click',e=>{const b=e.target.closest('[data-tp]');if(!b)return;const a=b.dataset.tp;
     if(a==='close')m.hidden=true;
-    else if(a==='del'){const tt=tplGet(TPLD.code);if(!confirm(`Delete the room template "${tt?tt.name:''}"?\n\nThis cannot be undone. Rooms already placed from it stay on the plan.`))return;UTPL=UTPL.filter(t=>t.code!==TPLD.code);store.set('osp-rtpl',JSON.stringify(UTPL));m.hidden=true;renderLib();toast('Template deleted')}
+    else if(a==='del'){const tt=tplGet(TPLD.code);if(!confirm(`Delete the room template "${tt?tt.name:''}"?\n\nThis cannot be undone. Rooms already placed from it stay on the plan.`))return;UTPL=UTPL.filter(t=>t.code!==TPLD.code);store.set('osk-rtpl',JSON.stringify(UTPL));m.hidden=true;renderLib();toast('Template deleted')}
     else if(a==='go'){const room=TPLD.room&&S.objs.includes(TPLD.room)?TPLD.room:null,q=tplVals();m.hidden=true;if(room)tplUpdate(room,q);else tplPlace(TPLD.code,q)}})})();
 
 /* ================= library panel ================= */
@@ -1202,12 +1205,12 @@ function renderLib(){
 $('#lib-q').addEventListener('input',e=>{libQ=e.target.value;renderLib()});
 $('#lib-cats').addEventListener('click',e=>{const b=e.target.closest('[data-cat]');if(b){libCat=b.dataset.cat;P.libDisc=libCat==='All'?'':libCat;savePrefs();renderLib()}});
 $('#lib-list').addEventListener('click',e=>{const hk=e.target.closest('[data-lk]');if(hk){const k=hk.dataset.lk;if(libShut.has(k))libShut.delete(k);else libShut.add(k);renderLib();const n=[...document.querySelectorAll('#lib-list [data-lk]')].find(x=>x.dataset.lk===k);if(n)n.focus({preventScroll:true});return}const tb=e.target.closest('[data-tpl]');if(tb){tplOpen(tb.dataset.tpl);return}const b=e.target.closest('[data-li]');if(!b)return;const l=LIB[+b.dataset.li];if(placeLib===l){setTool('select');return}if(!!P.rcp!==(l.cat==='Ceiling'))setRCP(l.cat==='Ceiling',true);placeLib=l;placeRot=0;placeFlip=false;setTool('place');renderLib();if(PHONE()&&P.lib){P.lib=false;savePrefs();applyDrawers()}});
-$('#lib-list').addEventListener('dragstart',e=>{const b=e.target.closest('[data-li]');if(!b)return;e.dataTransfer.setData('text/osp-lib',b.dataset.li);e.dataTransfer.effectAllowed='copy'});
+$('#lib-list').addEventListener('dragstart',e=>{const b=e.target.closest('[data-li]');if(!b)return;e.dataTransfer.setData('text/osk-lib',b.dataset.li);e.dataTransfer.effectAllowed='copy'});
 $('#lib-imp').addEventListener('click',()=>$('#f-lib').click());
 $('#f-lib').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(f)importLib(await f.text(),f.name)});
 function importLib(text,name){try{LIB=libFromCSV(text);if(LIB.some(l=>l.missing))toast('Some sets list items that are not in this CSV');saveLib();libCat='All';renderLib();toast(`Loaded ${LIB.length} items from ${name}`)}catch(err){toast(err.message)}}
 $('#lib-exp').addEventListener('click',async()=>{const r=await saveText('furniture-library.csv',libToCSV(LIB),'text/csv','.csv','CSV file');if(r)toast('Library exported')});
-$('#lib-reset').addEventListener('click',()=>{{const def=new Set(defLib().map(l=>l.code)),mine=LIB.filter(l=>!def.has(l.code)).length;if(mine&&!confirm(`Reset the library to the built-in list?\n\n${mine} item${mine>1?'s':''} you added or imported will be removed. This cannot be undone. Export CSV first if you want to keep them.`))return}LIB=libFromCSV(DEFAULT_LIB_CSV);store.del('osp-lib');renderLib();toast('Library reset to the built-in list')});
+$('#lib-reset').addEventListener('click',()=>{{const def=new Set(defLib().map(l=>l.code)),mine=LIB.filter(l=>!def.has(l.code)).length;if(mine&&!confirm(`Reset the library to the built-in list?\n\n${mine} item${mine>1?'s':''} you added or imported will be removed. This cannot be undone. Export CSV first if you want to keep them.`))return}LIB=libFromCSV(DEFAULT_LIB_CSV);store.del('osk-lib');renderLib();toast('Library reset to the built-in list')});
 
 /* ================= object creation ================= */
 function itemFromLib(l,x,y,r){return{id:uid(),t:'item',arms:l.shape==='chair'?hasArms(l):undefined,code:l.code,name:l.name,cat:l.cat,shape:l.shape,w:l.w,d:l.d,h:l.h,a:l.a,seats:l.seats,cf:l.cf,cb:l.cb,nests:!!l.nests,rate:l.rate,pts:l.pts?clone(l.pts):null,x,y,r:r||0,gid:null,label:'',sill:l.shape==='window'?(+l.a||0):undefined,drop:l.cat==='Ceiling'?(+l.a||0):undefined,from:l.cat==='Core'?null:undefined,to:l.cat==='Core'?null:undefined,roof:l.cat==='Core'?l.shape==='stair':undefined,cov:l.cat==='Ceiling'?0:undefined,tilt:/^cctv/.test(l.shape)?20:undefined,fov:/^cctv/.test(l.shape)?90:undefined,range:/^cctv/.test(l.shape)?15000:undefined}}
@@ -1269,14 +1272,14 @@ let addPtFor=null,shiftDown=false,ctrlDown=false,secSel=false,pinSel=null,drawAn
 /* roads and fences draw straight or curved; C switches while drawing */
 const siteCurve=()=>(tool==='road'&&!!P.roadCurve)||(tool==='fence'&&!!P.fenceCurve);
 const polyTool=()=>tool==='poly'||tool==='spline'||tool==='road'||tool==='fence'||tool==='trunk';
-const DRAW2D=['room','poly','spline','road','fence','trunk','measure','text','addpt','section','pin','shape','shape-rect','shape-round','shape-L','shape-poly'];
+const DRAW2D=['su-arc','su-erase','su-zwin','su-offset','su-scale','su-tape','su-circle','su-polygon','su-rrect','room','poly','spline','road','fence','trunk','measure','text','addpt','section','pin','shape','shape-rect','shape-round','shape-L','shape-poly'];
 /* tools usable directly in the 3D view (draw on the ground plane). Others still drop to 2D. */
 const DRAW3D=['room','poly','spline','road','fence','trunk','measure','text','addpt','section','pin','shape-rect','shape-round','shape-L','shape-poly'];
 const d3ClickPoly=t=>['poly','spline','road','fence','trunk','shape-poly'].includes(t);
 /* tools that act on a single tap of the floor in 3D */
 const d3TapTool=t=>t==='text'||t==='pin';
 const d3RectTool=t=>['room','shape-rect','shape-round','shape-L'].includes(t);
-function setTool(t){detBox=false;
+function setTool(t){detBox=false;if(typeof SU!=='undefined'&&SU&&t!==tool)suCancelAll();
   if(is3D&&DRAW2D.includes(t)&&!DRAW3D.includes(t))set3D(false);
   if(t!=='place'){placeLib=null;$$('.lib-row.on').forEach(b=>b.classList.remove('on'));if(typeof ghost3D==='function')ghost3D(null)}
   if(t!=='poly'&&t!=='spline'&&t!=='road'&&t!=='fence'&&t!=='trunk'&&t!=='shape-poly')polyPts=null;
@@ -1301,10 +1304,10 @@ $('#polybar')&&$('#polybar').addEventListener('click',e=>{const a=e.target.close
 function cancelPoly(){polyPts=null;typed='';updateHint();drawOverlay();render();if(is3D)drawD3Overlay();if(typeof polyBar==='function')polyBar();escSync()}
 $('#polybar')&&$('#polybar').addEventListener('input',e=>{if(e.target.tagName==='INPUT'){typed=e.target.value.replace(/[^0-9.]/g,'');drawOverlay();if(is3D)drawD3Overlay()}});
 $('#polybar')&&$('#polybar').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#polybar [data-pb=add]').click()}});
-function updateHint(){polyBar();escSync();if(rotChip&&!rotChip.hidden&&!rotTypedOK())rotChipHide();
+function updateHint(){polyBar();escSync();if(rotChip&&!rotChip.hidden&&!rotTypedOK())rotChipHide();if(typeof SU!=='undefined'&&SU)vcbSync();
   const h=$('#hint');let t='';
   if(tool==='paint'){h.innerHTML=`<b>Paint</b><span style="display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--line);vertical-align:-1px;background:${P.paintCol||'#d9c7a7'}"></span> Click a wall, floor, door or item · Shift-click a room for its walls · Alt-click to pick a colour · 2D and 3D`;h.hidden=false;return}
-  if(rotTyped&&rotLast)t=`<b>Rotate</b>Angle ${esc(rotTyped)}° · Enter to apply · Esc to cancel`;else if(rotLast&&tool==='select'&&!calib&&rotTypedOK())t=`<b>Rotate</b>Turned ${+rotLast.deg.toFixed(1)}° · type an exact angle and press Enter`;else
+  if(typeof SU!=='undefined'&&SU&&suHint())t=suHint();else if(rotTyped&&rotLast)t=`<b>Rotate</b>Angle ${esc(rotTyped)}° · Enter to apply · Esc to cancel`;else if(rotLast&&tool==='select'&&!calib&&rotTypedOK())t=`<b>Rotate</b>Turned ${+rotLast.deg.toFixed(1)}° · type an exact angle and press Enter`;else
   if(calib)t=calib.length===0?'<b>Calibrate</b>Click the first point of a known dimension':(calib.length===1?'<b>Calibrate</b>Click the second point':'<b>Calibrate</b>Enter the real length in the Underlay panel');
   else if(underMove)t='<b>Move underlay</b>Drag the floor plan into position, then press Done';
   else if(tool==='place'&&placeLib)t=`<b>${esc(placeLib.name)}</b>Click to place one · press and drag to fill a row or grid · snaps flush to walls and furniture (Alt places freely) · R rotates · Esc to stop`;
@@ -1323,7 +1326,7 @@ function updateHint(){polyBar();escSync();if(rotChip&&!rotChip.hidden&&!rotTyped
   else if(tool==='pin')t='<b>Pin</b>Click to drop a review comment, then type it in the Notes tab';
   else if(tool==='text')t='<b>Text</b>Click where the label goes';
   if(!is3D&&P.rcp&&tool==='select'&&!calib&&!underMove)t='<b>Ceiling plan</b>Furniture is faded · click lights, services and cameras · drag a camera\'s dot to aim it · C back to the floor plan';
-  if(is3D&&WALK.on)t='';else if(is3D&&tool==='place'&&placeLib)t=`<b>${esc(placeLib.name)}</b>Click the floor to place · R rotates · Esc to stop`;else if(is3D&&bldView)t='<b>Building</b>Click a floor to open it · drag to orbit · middle or right-drag to pan · PageUp / PageDown change floor · Tab back to 2D';else if(is3D)t='<b>3D view</b>Drag furniture to move it · drag the floor to orbit · middle or right-drag to pan · R rotates · Q adds furniture · Tab back to 2D';
+  if(is3D&&WALK.on)t='';else if(is3D&&!bldView&&typeof SU!=='undefined'&&SU&&['su-push','su-move','su-rotate'].includes(tool)&&suHint())t=suHint();else if(is3D&&tool==='place'&&placeLib)t=`<b>${esc(placeLib.name)}</b>Click the floor to place · R rotates · Esc to stop`;else if(is3D&&bldView)t='<b>Building</b>Click a floor to open it · drag to orbit · middle or right-drag to pan · PageUp / PageDown change floor · Tab back to 2D';else if(is3D)t='<b>3D view</b>Drag furniture to move it · drag the floor to orbit · middle or right-drag to pan · R rotates · Q adds furniture · Tab back to 2D';
   h.innerHTML=t;h.hidden=!t;
 }
 function pointerWorld(ev){const w=toWorld(ev);lastW=w;$('#coords').textContent=`${fmt(w[0])}, ${fmt(w[1])} mm`;return w}
@@ -1347,7 +1350,7 @@ svg.addEventListener('pointerdown',ev=>{
   closePops();
   const w=pointerWorld(ev);
   if(ev.button===2){ev.preventDefault();if(polyTool()&&polyPts&&polyPts.length>=2){finishPoly(false);return}if(tool==='place'||polyPts||tool==='room')setTool('select');return}
-  if(ev.button===1||spaceDown||tool==='pan'){drag={m:'pan',sx:ev.clientX,sy:ev.clientY,vx:V.x,vy:V.y};svg.setPointerCapture(ev.pointerId);svg.style.cursor='grabbing';return}
+  if(ev.button===1||spaceDown||tool==='pan'){if(spaceDown&&SU)SU.spaceUsed=true;drag={m:'pan',sx:ev.clientX,sy:ev.clientY,vx:V.x,vy:V.y};svg.setPointerCapture(ev.pointerId);svg.style.cursor='grabbing';return}
   if(ev.pointerType!=='mouse'&&tool==='select'&&!WALK.on&&!polyPts&&!calib&&!detBox&&!walkPick){clearTimeout(lpTimer);const sx=ev.clientX,sy=ev.clientY,pid=ev.pointerId,tgt=ev.target;
     lpTimer=setTimeout(()=>{if(!pointers.has(pid))return;const p=pointers.get(pid);if(Math.hypot(p[0]-sx,p[1]-sy)>10)return;drag=null;try{svg.releasePointerCapture(pid)}catch(e){}pointers.delete(pid);lpFired=true;lpMenuPid=pid;if(navigator.vibrate)navigator.vibrate(8);showCtx({clientX:sx,clientY:sy,target:tgt,preventDefault(){}})},480)}
   if(ev.pointerType==='touch'&&!polyPts&&!walkPick&&!calib&&!detBox&&!underMove){const onObj=ev.target.closest('[data-id],[data-vh],[data-bh],[data-aim],[data-pin],[data-roth]');
@@ -1361,6 +1364,7 @@ svg.addEventListener('pointerdown',ev=>{
       if(o&&(o.t==='wall'||(o.t==='room'&&!o.link&&polyProj(o.pts.concat([o.pts[0]]),w).d<fs(8)))&&insertCorner(o,w)){lastDown=null;drag=null;ev.preventDefault();return}}
     if(dbl&&tool==='select'&&ev.target.closest('[data-pin]')){lastDown=null;drag=null;clearTimeout(lpTimer);pointers.delete(ev.pointerId);ev.preventDefault();openPin(ev.target.closest('[data-pin]').dataset.pin);return}
     if(dbl&&!polyPts&&!calib&&!detBox&&!walkPick&&(tool==='select'||tool==='room')){const hit=dblTarget(ev);if(hit){lastDown=null;drag=null;ev.preventDefault();
+      if(typeof SU!=='undefined'&&SU&&suOn()&&hit.gid&&SU.gctx!==hit.gid&&tool==='select'){suGroupEnter(hit.gid);return}
       if(hit.t==='room')renameRoom(hit);else if(hit.t==='item')renameItem(hit);else{setSel([hit.id]);showTab('sel');setTimeout(()=>{const i=$('#f-text');if(i){i.focus();i.select()}},30)}return}}}
   svg.setPointerCapture(ev.pointerId);
   const sw=[snapV(w[0]),snapV(w[1])];
@@ -1406,14 +1410,14 @@ svg.addEventListener('pointerdown',ev=>{
       if(secSel){secSel=false}
       if(pinSel){pinSel=null;if(!$('#p-notes').hidden)renderNotes()}
       if(o){
-        const grp=ev.altKey?[o]:groupOf(o);
-        if(addMod(ev)){const allIn=grp.every(g=>sel.has(g.id));grp.forEach(g=>allIn?sel.delete(g.id):sel.add(g.id));render();renderInspector();return}
+        const grp=ev.altKey||(typeof SU!=='undefined'&&SU&&SU.gctx&&o.gid===SU.gctx)?[o]:groupOf(o);
+        if(addMod(ev)){const allIn=grp.every(g=>sel.has(g.id)),md=suSelMode(ev);grp.forEach(g=>md==='add'?sel.add(g.id):md==='sub'?sel.delete(g.id):(allIn?sel.delete(g.id):sel.add(g.id)));render();renderInspector();return}
         if(!sel.has(o.id)){sel=new Set(grp.map(g=>g.id))}
         renderInspector();
         drag={m:'move',w0:w,orig:selList().concat(carried(selList())).map(x=>[x.id,clone(x)]),moved:false};render();return;
       }
       const addKey=addMod(ev);if(!addKey)sel.clear();
-      drag={m:'marq',a:w,b:w,add:addKey,base:new Set(sel)};render();renderInspector();return}
+      drag={m:'marq',a:w,b:w,add:addKey,base:new Set(sel),mode:addKey?suSelMode(ev):'add'};render();renderInspector();return}
   }
 });
 svg.addEventListener('pointermove',ev=>{shiftDown=ev.shiftKey;ctrlDown=ev.ctrlKey||ev.metaKey;
@@ -1449,7 +1453,7 @@ svg.addEventListener('pointermove',ev=>{shiftDown=ev.shiftKey;ctrlDown=ev.ctrlKe
         const P=drag.o.pts;P[R.iB]=pt(a,0);P[R.iD]=pt(0,b);P[drag.i]=pt(a,b);guideSVG=sn.g;clashDirty=true;render();return}
       drag.o.pts[drag.i]=sn.p;guideSVG=sn.g;clashDirty=true;render();return}
     case 'marq':drag.b=w;{const x0=Math.min(drag.a[0],w[0]),x1=Math.max(drag.a[0],w[0]),y0=Math.min(drag.a[1],w[1]),y1=Math.max(drag.a[1],w[1]),cross=w[0]<drag.a[0];const box={x0,y0,x1,y1};const ns=new Set(drag.base);
-      S.objs.forEach(o=>{if(fixed(o))return;if(!visible(o)||!pickable(o))return;const b=objBox(o);const hit=cross?boxHit(b,box):(b.x0>=x0&&b.x1<=x1&&b.y0>=y0&&b.y1<=y1);if(hit)groupOf(o).forEach(g=>ns.add(g.id))});sel=ns;render()}return;
+      S.objs.forEach(o=>{if(fixed(o))return;if(!visible(o)||!pickable(o))return;const b=objBox(o);const hit=cross?boxHit(b,box):(b.x0>=x0&&b.x1<=x1&&b.y0>=y0&&b.y1<=y1);if(hit)groupOf(o).forEach(g=>drag.mode==='sub'?ns.delete(g.id):drag.mode==='tog'?(drag.base.has(g.id)?ns.delete(g.id):ns.add(g.id)):ns.add(g.id))});sel=ns;render()}return;
     case 'move':{
       let dx=w[0]-drag.w0[0],dy=w[1]-drag.w0[1];
       if(!drag.moved){if(Math.hypot(dx,dy)*V.k<3)return;drag.moved=true;pushPast(snapState());future=[];}
@@ -1502,6 +1506,7 @@ function pointSnap(w,opt){
   const tol=10/V.k,T=snapLines(opt.ids||null,opt.exV,!opt.faces);let g='';
   /* also snap to the points of the line being drawn, so you can line up with (and close back onto) the start point */
   let verts=T.verts,xs=T.xs,ys=T.ys;
+  if(typeof SU!=='undefined'&&SU&&suOn()&&!opt.axis){const r=suInfer(w,tol,T,opt);if(r)return r}
   if(polyPts&&polyPts.length){const pp=polyPts.slice(0,polyPts.length-1);if(pp.length){verts=verts.concat(pp);xs=xs.concat(pp.map(p=>p[0]));ys=ys.concat(pp.map(p=>p[1]))}}
   if(!opt.axis){let best=null;verts.forEach(v=>{const d=Math.hypot(v[0]-w[0],v[1]-w[1]);if(d<tol&&(!best||d<best.d))best={d,v}});
     if(best){return{p:[best.v[0],best.v[1]],g:`<rect class="snapv" x="${best.v[0]-fs(5)}" y="${best.v[1]-fs(5)}" width="${fs(10)}" height="${fs(10)}"/>`}}}
@@ -1545,23 +1550,34 @@ svg.addEventListener('pointerup',ev=>{
     if((x1-x0)*V.k<20||(y1-y0)*V.k<20){toast('Drag a larger box, or press Enter for the whole sheet');render();return}
     runDetect({x0,y0,x1,y1});return}
   if(d.m==='rect'){
+    if(suOn()&&(tool==='room'||tool==='shape-rect')&&Math.hypot(d.b[0]-d.a[0],d.b[1]-d.a[1])*V.k<6){SU.rect={a:d.a,b:d.a};SU.typed='';updateHint();render();return}
+    rectFinish(d.a,d.b);return}
+  if(d.m==='measure'){if(Math.hypot(d.b[0]-d.a[0],d.b[1]-d.a[1])>10)addObjs([{id:uid(),t:'dim',a:d.a,b:d.b,gid:null}],false);else render();return}
+  if(d.m==='section'){if(Math.hypot(d.b[0]-d.a[0],d.b[1]-d.a[1])>200){checkpoint();S.section={a:d.a,b:d.b,on:true,flip:!!(S.section&&S.section.flip)};markDirty();setTool('select');secSel=true;renderInspector();toast('Section line set — open the 3D view to see the slice');if(is3D)sectionApply();sectionBar()}render();return}
+  SUREST(d)});
+function rectFinish(a,b){{const d={a,b};
     const x0=Math.min(d.a[0],d.b[0]),x1=Math.max(d.a[0],d.b[0]),y0=Math.min(d.a[1],d.b[1]),y1=Math.max(d.a[1],d.b[1]);
     if((x1-x0)<100||(y1-y0)<100){render();return}
     if(tool==='room'){const n=S.objs.filter(o=>o.t==='room').length+1;addObjs([{id:uid(),t:'room',name:'Room '+n,pts:rectP(x0,y0,x1,y1),gid:null}],true);showTab('sel');return}
     else{const kind=tool.slice(6);const o={id:uid(),t:'item',code:'CUSTOM',name:kind==='round'?'Custom round':(kind==='L'?'Custom L-shape':'Custom rectangle'),cat:'Custom',shape:kind,w:x1-x0,d:y1-y0,h:750,a:Math.round(Math.min(x1-x0,y1-y0)/2),seats:0,cf:0,cb:0,nests:false,rate:null,pts:null,x:(x0+x1)/2,y:(y0+y1)/2,r:0,gid:null,label:''};addObjs([o],true)}
     setTool('select');showTab('sel');return;
-  }
-  if(d.m==='measure'){if(Math.hypot(d.b[0]-d.a[0],d.b[1]-d.a[1])>10)addObjs([{id:uid(),t:'dim',a:d.a,b:d.b,gid:null}],false);else render();return}
-  if(d.m==='section'){if(Math.hypot(d.b[0]-d.a[0],d.b[1]-d.a[1])>200){checkpoint();S.section={a:d.a,b:d.b,on:true,flip:!!(S.section&&S.section.flip)};markDirty();setTool('select');secSel=true;renderInspector();toast('Section line set — open the 3D view to see the slice');if(is3D)sectionApply();sectionBar()}render();return}
+  }}
+/* the rest of the pointer-up cases, split out so the rectangle can also be finished by a second click */
+function SUREST(d){
   if(d.m==='vertex'&&d.moved&&d.old&&!d.o.site){followWall(d.o,d.old);render()}
   if(d.m==='vertex'||d.m==='bulge'){markDirty();renderInspector();return}
   if(d.m==='marq'){renderInspector();render();return}
   if(d.m==='rot'){if(d.moved){clashDirty=true;markDirty();rotLast={ids:d.ids,sel:[...sel],orig:d.orig.map(([o,c])=>[o,c]),cx:d.cx,cy:d.cy,deg:d.deg,sig:rotSig(d.ids)};if(is3D)build3D()}render();renderInspector();updateHint();if(d.moved)rotChipShow();return}
   if(d.m==='move'){if(d.moved){markDirty();clashDirty=true}render();renderInspector();return}
-});
+}
 svg.addEventListener('pointercancel',ev=>{clearTimeout(lpTimer);pointers.delete(ev.pointerId);if(drag&&drag.holdId===ev.pointerId){drag.axisHold=false;drag.holdId=null;return}pinch=null;drag=null;render()});
 svg.addEventListener('contextmenu',e=>{e.preventDefault();if(WALK.on||tool==='place'||polyPts||calib||detBox||walkPick)return;showCtx(e)});
-function ctxItems(){
+function ctxItems(){const it=ctxItems0();if(!suOn()||secSel)return it;const l=selList();const add=[];
+  if(l.length===1&&(l[0].t==='room'||l[0].t==='wall'))add.push(['su-offset','Offset…']);
+  if(l.length&&!l.some(o=>o.cmp))add.push(['su-comp','Make component…']);if(l.some(o=>o.cmp))add.push(['su-cedit','Edit component'],['su-cuniq','Make unique'],['su-cexp','Explode component']);
+  if(l.length){add.push(['su-zsel','Zoom selection'],['su-flipx','Flip along red (x)'],['su-flipy','Flip along green (y)'],['su-hide','Hide'],['su-iso','Hide everything else'])}else add.push(['su-zwin','Zoom window'],['su-prev','Previous view'],['su-scene','Add scene']);if(!l.length&&S.guides&&S.guides.length)add.push(['su-guidesx','Delete guides']);
+  if(SU.hidden.size)add.push(['su-unhide',`Unhide all (${SU.hidden.size})`]);it.forEach(r=>{if(r[0]==='group')r[1]='Make group'});const di=it.findIndex(r=>r[0]==='del');if(di<0)return it.concat(add);return it.slice(0,di).concat(add,it.slice(di))}
+function ctxItems0(){
   let items=[];
   if(secSel&&S.section){return [['grp','Section cut'],['sectoggle',S.section.on?'Turn off slice':'Turn on slice'],['secflip','Flip side'],['secdel','Delete section','danger']];}
   const l=selList();
@@ -1689,7 +1705,7 @@ mainEl.addEventListener('dragenter',e=>{if([...e.dataTransfer.types].includes('F
 mainEl.addEventListener('dragleave',e=>{if([...e.dataTransfer.types].includes('Files')){dragDepth=Math.max(0,dragDepth-1);if(!dragDepth)$('#drop').hidden=true}});
 mainEl.addEventListener('dragover',e=>{e.preventDefault()});
 mainEl.addEventListener('drop',async e=>{e.preventDefault();dragDepth=0;$('#drop').hidden=true;
-  const li=e.dataTransfer.getData('text/osp-lib');
+  const li=e.dataTransfer.getData('text/osk-lib');
   if(li!==''){const l=LIB[+li];if(!l)return;if(l.missing)return toast('This set uses items that are not in the library.');const w=toWorld(e);const keep=[placeLib,placeRot];placeLib=l;placeRot=0;const gh=ghostAt(w,e.altKey);placeLib=keep[0];placeRot=keep[1];addObjs(gh.objs,true);showTab('sel');return}
   const f=e.dataTransfer.files[0];if(!f)return;
   if(/\.json$/i.test(f.name))openPlanText(await f.text(),null,f.name);
@@ -1709,7 +1725,7 @@ function turnObj(o,cx,cy,deg){const n=d=>((d%360)+360)%360;
 function turnPlan(deg,quiet){deg=((deg+180)%360+360)%360-180;if(!deg||!isFinite(deg))return false;leaveRoof();checkpoint();syncFloorOut(S);const b=S.bld;
   /* only finite corners count: one damaged object must not send every other one to NaN */const pts=[];S.objs.forEach(o=>{const q=objBox(o);if([q.x0,q.y0,q.x1,q.y1].every(isFinite))pts.push([q.x0,q.y0],[q.x1,q.y1])});const u=S.underlay;if(!pts.length&&u&&u.src)pts.push([u.x,u.y],[u.x+u.w*u.mpp,u.y+u.h*u.mpp]);const bb=pts.length?bboxPts(pts):{x0:0,y0:0,x1:0,y1:0},cx=Math.round((bb.x0+bb.x1)/2),cy=Math.round((bb.y0+bb.y1)/2);
   [b.typical,b.cores,b.roofFit].concat(b.levels.map(l=>l.base),b.levels.map(l=>l.fit)).forEach(a=>{if(Array.isArray(a))a.forEach(o=>turnObj(o,cx,cy,deg))});syncFloorIn(S);
-  (S.pins||[]).forEach(p=>{const q=rotPt(p.x,p.y,cx,cy,deg);p.x=q[0];p.y=q[1]});if(S.section&&S.section.a&&S.section.b){S.section.a=rotPt(S.section.a[0],S.section.a[1],cx,cy,deg);S.section.b=rotPt(S.section.b[0],S.section.b[1],cx,cy,deg)}
+  (S.pins||[]).forEach(p=>{const q=rotPt(p.x,p.y,cx,cy,deg);p.x=q[0];p.y=q[1]});(S.guides||[]).forEach(g=>{g.a=rotPt(g.a[0],g.a[1],cx,cy,deg);g.b=rotPt(g.b[0],g.b[1],cx,cy,deg)});if(S.section&&S.section.a&&S.section.b){S.section.a=rotPt(S.section.a[0],S.section.a[1],cx,cy,deg);S.section.b=rotPt(S.section.b[0],S.section.b[1],cx,cy,deg)}
   if(u){const w=u.w*u.mpp,h=u.h*u.mpp,c=rotPt(u.x+w/2,u.y+h/2,cx,cy,deg);u.x=c[0]-w/2;u.y=c[1]-h/2;u.rot=+((((u.rot||0)+deg)%360+360)%360).toFixed(3);if(!u.rot)delete u.rot}
   S.north=+(((num(S.north,0)+deg)%360+360)%360).toFixed(3);
   if(S.site){const r0=(S.site.r||0),r1=r0-deg,R=(a,x,y)=>{const t=a*Math.PI/180,c=Math.cos(t),n=Math.sin(t);return[x*c-y*n,x*n+y*c]},p0=R(r0,cx,cy),p1=R(r1,cx,cy);S.site=Object.assign({},S.site,{r:+(((r1%360)+360)%360).toFixed(3),x:Math.round((S.site.x||0)+p0[0]-p1[0]),y:Math.round((S.site.y||0)+p0[1]-p1[1])})}
@@ -1765,9 +1781,9 @@ function deleteAction(){if(secSel&&S.section){checkpoint();S.section=undefined;s
   if(!sel.size)return;deleteSel();toast('Deleted')}
 function deleteSel(kit){if(!sel.size)return;checkpoint();const l=selList(),gone=new Set(sel);if(kit)roomKit(l).forEach(o=>gone.add(o.id));const rooms=new Set(l.filter(o=>o.t==='room').map(o=>o.id));/* deleting a room deletes only the room: what stood in it stays, as free items no longer tied to a template */S.objs=S.objs.filter(o=>!gone.has(o.id));S.objs.forEach(o=>{if(o.tp&&rooms.has(o.tp))delete o.tp});sel.clear();clashDirty=true;render();renderInspector()}
 let clip=null,pasteN=0;
-function copySel(){let l=selList();if(!l.length)return false;l=l.concat(roomKit(l));clip=clone(l);pasteN=0;store.set('osp-clip',JSON.stringify(clip));toast(`Copied ${l.length} ${l.length===1?'object':'objects'}`);return true}
+function copySel(){let l=selList();if(!l.length)return false;l=l.concat(roomKit(l));clip=clone(l);pasteN=0;store.set('osk-clip',JSON.stringify(clip));toast(`Copied ${l.length} ${l.length===1?'object':'objects'}`);return true}
 function pasteClip(atCursor){
-  let c=clip;if(!c){try{c=JSON.parse(store.get('osp-clip')||'null')}catch(e){}}
+  let c=clip;if(!c){try{c=JSON.parse(store.get('osk-clip')||'null')}catch(e){}}
   if(Array.isArray(c)){const seen=new Set();c=c.map(o=>normObj(o,seen)).filter(o=>o&&o!=='unknown')}
   if(!c||!c.length)return toast('Nothing to paste');
   const b=unionBox(c);let dx,dy;
@@ -3024,7 +3040,7 @@ $('#m-undp').addEventListener('click',()=>{closePops();showTab('und',true)});
 $('#m-axes').addEventListener('click',()=>{closePops();axesOpen()});
 $('#axes-modal').addEventListener('click',e=>{const t=e.target.closest('button');if(!t)return;if(t.id==='axes-x')$('#axes-modal').hidden=true;else if(t.id==='axes-pick')axesPickStart();else if(t.id==='axes-go'){const v=parseFloat($('#axes-deg').value);if(!isFinite(v)||!v)return toast('Type an angle in degrees. A minus sign turns anticlockwise');if(Math.abs(v)>360)return toast('An angle between -360 and 360');turnPlan(v);$('#axes-deg').value=''}else if(t.id==='axes-reset'){const ax=num(S.axes,0);if(ax)turnPlan(-ax)}});
 $('#axes-deg').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#axes-go').click()}});
-$('#m-ver').innerHTML=`StoreyBook ${APP_VERSION}${APP_TEST?' · '+APP_TEST:''} · plan format ${PLAN_V} · library ${LIB_V}<br>Your plans stay in this browser; nothing is uploaded.<br>© Jeff Ying. Free to use; not for redistribution. Not for statutory submission.`;
+$('#m-ver').innerHTML=`StoreyBook ${APP_VERSION}${APP_FORK?' ('+APP_FORK+')':''}${APP_TEST?' · '+APP_TEST:''} · plan format ${PLAN_V} · library ${LIB_V}<br>Your plans stay in this browser; nothing is uploaded.<br>© Jeff Ying. Free to use; not for redistribution. Not for statutory submission.`;
 $('#m-save').addEventListener('click',()=>{closePops();savePlan(false)});
 $('#m-saveas').addEventListener('click',()=>{closePops();savePlan(true)});
 $('#m-sch').addEventListener('click',()=>{closePops();exportSchedule()});
@@ -3250,9 +3266,9 @@ document.addEventListener('keydown',e=>{
   const tag=(e.target.tagName||'').toLowerCase();const typing=tag==='input'||tag==='textarea'||tag==='select'||e.target.isContentEditable;
   const mod=e.ctrlKey||e.metaKey;const k=e.key.toLowerCase();
   /* Esc closes the dialog in front, from anywhere including inside one of its fields, and before it closes the AI panel behind it */
-  if(e.key==='Escape'&&!($('#cmdk')&&!$('#cmdk').hidden)){const m=['axes-modal','tpl-modal','campus-modal','prog-modal','keys-modal','snap-modal','plans-modal','guide-modal','mig-modal'].map(i=>document.getElementById(i)).find(x=>x&&!x.hidden);if(m){m.hidden=true;if(m.id==='campus-modal')CAMP.adding=false;e.preventDefault();return}}
+  if(e.key==='Escape'&&!($('#cmdk')&&!$('#cmdk').hidden)){const m=['su-mats','su-outliner','su-modal','axes-modal','tpl-modal','campus-modal','prog-modal','keys-modal','snap-modal','plans-modal','guide-modal','mig-modal'].map(i=>document.getElementById(i)).find(x=>x&&!x.hidden);if(m){m.hidden=true;if(m.id==='campus-modal')CAMP.adding=false;e.preventDefault();return}}
   /* a dialog is in front: the plan behind it takes no keys (Delete used to remove the selection). Esc still closes the dialog, ? still toggles Shortcuts, and typing in the dialog's own fields is left alone */
-  if(e.key!=='Escape'&&e.key!=='?'&&e.key!=='Tab'&&!(mod&&k==='s')&&document.querySelector('#axes-modal:not([hidden]),#keys-modal:not([hidden]),#tpl-modal:not([hidden]),#campus-modal:not([hidden]),#prog-modal:not([hidden]),#plans-modal:not([hidden]),#snap-modal:not([hidden]),#guide-modal:not([hidden]),#mig-modal:not([hidden])')){if(!typing&&!e.target.closest('#campus-map')&&(e.key==='Delete'||e.key==='Backspace'||mod))e.preventDefault();return}
+  if(e.key!=='Escape'&&e.key!=='?'&&e.key!=='Tab'&&!(mod&&k==='s')&&document.querySelector('#su-mats:not([hidden]),#su-outliner:not([hidden]),#su-modal:not([hidden]),#axes-modal:not([hidden]),#keys-modal:not([hidden]),#tpl-modal:not([hidden]),#campus-modal:not([hidden]),#prog-modal:not([hidden]),#plans-modal:not([hidden]),#snap-modal:not([hidden]),#guide-modal:not([hidden]),#mig-modal:not([hidden])')){if(!typing&&!e.target.closest('#campus-map')&&(e.key==='Delete'||e.key==='Backspace'||mod))e.preventDefault();return}
   if(mod&&k==='s'){e.preventDefault();savePrefs();savePlan(e.shiftKey);return}
   if(mod&&k==='o'){e.preventDefault();openPlan();return}
   if(mod&&k==='k'){e.preventDefault();cmdkOpen();return}
@@ -3266,6 +3282,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&$('#ai-panel')&&!$('#ai-panel').hidden){/* closing the panel never stops the AI: only the Stop button does. It carries on and the preview bar appears when it is done */aiClose();return}
   if(typing&&e.key==='Escape'&&!e.target.closest('.modal,#ctxmenu')&&e.target.id!=='lib-q'){e.target.blur();return}
   if(typing)return;
+  if(!WALK.on&&SU&&suKey(e,k,mod))return;
   if(e.key==='?'){e.preventDefault();openKeys();return}
   if(!$('#keys-modal').hidden&&e.key==='Escape'){$('#keys-modal').hidden=true;return}
   if($('#snap-modal')&&!$('#snap-modal').hidden&&e.key==='Escape'){$('#snap-modal').hidden=true;return}
@@ -3291,13 +3308,13 @@ document.addEventListener('keydown',e=>{
     /* physical key positions, so an input method or Shift can never leave a key stuck down */
     const wk=walkKey(e);if(wk){WALK.keys.add(wk);e.preventDefault();return}
     if(!mod)return}
-  if(e.key===' '&&!spaceDown){spaceDown=true;svg.style.cursor='grab';e.preventDefault();return}
+  if(e.key===' '&&!spaceDown){if(SU)SU.spaceUsed=false;spaceDown=true;svg.style.cursor='grab';e.preventDefault();return}
   if(mod){
     if(k==='z'&&!e.shiftKey){e.preventDefault();undo();return}
     if((k==='z'&&e.shiftKey)||k==='y'){e.preventDefault();redo();return}
     if(k==='c'){if(copySel())e.preventDefault();return}
     if(k==='x'){if(copySel()){e.preventDefault();deleteSel(true)}return}
-    if(k==='v'){if(clip||store.get('osp-clip')){e.preventDefault();pasteClip(true)}return} /* furniture you copied here always wins; otherwise the paste event may carry a floor plan image */
+    if(k==='v'){if(clip||store.get('osk-clip')){e.preventDefault();pasteClip(true)}return} /* furniture you copied here always wins; otherwise the paste event may carry a floor plan image */
     if(k==='d'){e.preventDefault();duplicateSel();return}
     if(k==='a'){e.preventDefault();setSel(S.objs.filter(o=>!isWallish(o)&&visible(o)&&pickable(o)).map(o=>o.id));return}
     if(k==='g'){e.preventDefault();e.shiftKey?ungroupSel():groupSel();return}
@@ -3339,6 +3356,475 @@ document.addEventListener('keydown',e=>{
   if(e.key==='+'||e.key==='='){zoomAt(1.25,W/2,H/2);return}
   if(e.key==='-'){zoomAt(0.8,W/2,H/2);return}
 });
+/*@su-start*/
+/* ================= SketchUp way of working (fork: 5.0.0 sketchup) =================
+   Tools that behave like SketchUp's: Move (M) and Rotate (Q) pick up with one click and put down with the next;
+   a value typed straight after (or during) any of them goes into the Measurements box and Enter applies it:
+   a distance, an angle, "4000,3000" for a rectangle, "x5" or "/5" for copies. Ctrl while moving or rotating makes a copy.
+   Eraser (E) deletes what you click or drag across. The axes are coloured as in SketchUp: red along x, green along y. */
+var SU={hidden:new Set(),views:[],zw:null,mv:null,rt:null,rect:null,er:null,last:null,typed:'',cur:null,g:'',spaceUsed:false};
+function suOn(){return P.suKeys===undefined?!location.hash.endsWith('-debug'):!!P.suKeys}
+function suCancelAll(){if(!SU)return;if(SU.arc){SU.arc=null;render()}if(SU.cir||SU.rr){SU.cir=null;SU.rr=null;render()}SU.zw=null;if(SU.sc)suScaleCancel();if(SU.tp){SU.tp=null;render()}if(SU.of){SU.of=null;render()}if(SU.pp)suPPCancel();if(SU.mv)suMoveCancel();if(SU.rt)suRotCancel();SU.rect=null;SU.er=null;SU.typed=''}
+function suHint(){if(!SU)return'';const c=SU.mv?SU.mv.copy:SU.rt?SU.rt.copy:false;
+  if(SU.typed)return`<b>Measurements</b>${esc(SU.typed)} · Enter to apply · Esc to clear`;
+  if(SU.rect&&(tool==='room'||tool==='shape-rect'))return'<b>Rectangle</b>Click the opposite corner, or type width,depth (e.g. 4000,3000) and press Enter';
+  if(SU.mv)return`<b>${c?'Copy':'Move'}</b>Click to put it down · type a distance and Enter · Ctrl ${c?'stops copying':'makes a copy'} · Shift locks the axis · Esc cancels`;
+  if(SU.rt)return SU.rt.stage===1?'<b>Rotate</b>Click to set the starting direction · Esc cancels':`<b>${c?'Rotate copy':'Rotate'}</b>Click to finish · snaps every 15° (Alt turns freely) · type an angle and Enter · Ctrl ${c?'stops copying':'makes a copy'}`;
+  if(tool==='su-move'||tool==='su-rotate'){if(suLastOK()){const L=SU.last;return L.copy?`<b>${L.kind==='move'?'Copy':'Rotate copy'}</b>Type x5 for five copies, /5 to spread five over the ${L.kind==='move'?'distance':'angle'}, or a new ${L.kind==='move'?'distance':'angle'}`:`<b>${L.kind==='move'?'Move':'Rotate'}</b>Type a new ${L.kind==='move'?'distance':'angle'} and press Enter to change it`}
+    if(is3D)return tool==='su-move'?'<b>Move</b>Press on furniture and drag on the floor, or click, move, click · ↑ locks the blue axis to lift it · Ctrl copies · type a distance':'<b>Rotate</b>Press on what to turn and drag round it · snaps every 15° · type an angle';
+    return tool==='su-move'?'<b>Move</b>Click what to move (or select first), then click where it goes · Ctrl copies · Shift locks the axis':'<b>Rotate</b>Select, or click the object, at the centre of rotation; then click a starting direction and turn'}
+  if(tool==='su-arc'){if(!SU.arc)return'<b>Arc</b>Click where the arc starts';if(!SU.arc.b)return'<b>Arc</b>Click where it ends';return`<b>Arc</b>Move out to bow it (${fmt(Math.abs(SU.arc.h||0))}) and click, or type the bulge · Esc cancels`}
+  if(tool==='su-circle'||tool==='su-polygon'){const nm=tool==='su-circle'?'Circle':'Polygon';if(SU.cir&&SU.cir.c)return`<b>${nm}</b>Radius ${fmt(SU.cir.r)}, ${SU.cir.n} sides · click to finish · type a radius, or 12s for 12 sides · Esc cancels`;if(suLastOK())return`<b>${nm}</b>Type a new radius, or 12s for 12 sides, and Enter to change it`;return`<b>${nm}</b>Click the centre of a round room · type 12s first to change the number of sides`}
+  if(tool==='su-rrect'){if(SU.rr)return SU.rr.stage===1?'<b>Rotated rectangle</b>Click the other end of the first side':'<b>Rotated rectangle</b>Move out for the depth and click, or type it · Esc cancels';return'<b>Rotated rectangle</b>Click one corner, then the other end of a side at any angle, then the depth'}
+  if(tool==='su-scale'){if(SU.sc)return`<b>Scale</b>${+SU.sc.f.toFixed(3)} · move away or towards the centre, click to finish · type a factor and Enter · Esc cancels`;if(suLastOK()&&SU.last.kind==='sc')return'<b>Scale</b>Type a new factor and Enter to change it';return'<b>Scale</b>Select, then click on it and pull · plan sizes scale about the centre; heights stay'}
+  if(tool==='su-tape'){if(SU.tp)return`<b>Tape measure</b>Guide ${fmt(Math.abs(SU.tp.d))} from the edge · click to place · type a distance and Enter · Esc cancels`;if(suLastOK()&&SU.last.kind==='tp')return'<b>Tape measure</b>Type a new distance and Enter to move the guide';return'<b>Tape measure</b>Click an edge and pull out a guide line parallel to it · right-click empty space › Delete guides'}
+  if(tool==='su-offset'){if(SU.of)return`<b>Offset</b>${fmt(Math.abs(SU.of.d))} ${SU.of.d<0?'inward':'outward'} · click to finish · type a distance and Enter · Esc cancels`;if(suLastOK()&&SU.last.kind==='off')return'<b>Offset</b>Type a new distance and Enter to change it';return'<b>Offset</b>Click a room or a wall, move in or out, click again · a new outline is made and the original stays'}
+  if(tool==='su-push'){if(SU.pp)return`<b>Push/Pull</b>${esc(SU.pp.t.label)} ${fmt(SU.pp.t.get())} · move up or down, click to finish · type a value and Enter · Esc cancels`;if(suLastOK()&&SU.last.kind==='pp')return`<b>Push/Pull</b>${esc(SU.last.t.label)} ${fmt(SU.last.t.get())} · type a new value and Enter to change it`;return is3D?'<b>Push/Pull</b>Press on an item and drag up or down to set its height, or on a wall or floor to set the floor-to-ceiling height · or click, move, click':'<b>Push/Pull</b>Click an item, room or wall, then type its height and press Enter (in 3D you can pull it)'}
+  if(tool==='su-zwin')return'<b>Zoom window</b>Drag a box, or click two corners, round what to zoom to · F8 goes back';
+  if(SU.gctx&&tool==='select')return'<b>Group</b>Editing inside the group: click its parts to select them · Esc or a click outside leaves';
+  if(SU.hidden.size&&tool==='select')return`<b>Hidden</b>${SU.hidden.size} hidden · right-click › Unhide all · hidden things are left out of the checks, as with a layer turned off`;
+  if(tool==='su-erase')return'<b>Eraser</b>Click, or drag across, what to delete · a room goes alone and its contents stay';return''}
+const SU_TOOLS=['su-arc','su-move','su-rotate','su-erase','su-zwin','su-push','su-offset','su-scale','su-tape','su-circle','su-polygon','su-rrect'];
+function suBusy(){return !!(SU.arc||SU.mv||SU.rt||SU.rect||SU.er||SU.pp||SU.of||SU.sc||SU.tp||SU.cir||SU.rr)}
+function suPopPast(){const s=past.pop();if(s)pastBytes-=s.length}
+function suTargets(ev){let l=selList().filter(o=>!fixed(o));if(l.length)return l;
+  const el=ev&&ev.target&&ev.target.closest&&ev.target.closest('[data-id]');let o=el?byId(el.dataset.id):null;if(!o||fixed(o))return null;
+  l=groupOf(o).filter(x=>!fixed(x));sel=new Set(l.map(x=>x.id));renderInspector();return l}
+/* copies of a set of objects, with new ids and their own group and template links */
+function suClones(src){const gmap={};const out=src.map(o=>{const n=clone(o);n.id=uid();if(n.arr)delete n.arr;if(n.gid){gmap[n.gid]=gmap[n.gid]||uid();n.gid=gmap[n.gid]}return n});tpFix(src.map((o,i)=>[o,out[i]]));return out}
+function suRemove(ids){const g=new Set(ids);S.objs=S.objs.filter(o=>!g.has(o.id))}
+function suAxis(d){if(!d[0]&&!d[1])return'';if(Math.abs(d[1])<0.5)return'x';if(Math.abs(d[0])<0.5)return'y';return''}
+const SU_COL={x:'#d6332e',y:'#2f9a3a','':'var(--accent)'};
+
+/* ---- Move ---- */
+function suMoveStart(list,base){const kit=list.concat(carried(list));checkpoint();
+  SU.mv={base,ids:list.map(o=>o.id),orig:kit.map(o=>[o.id,clone(o)]),d:[0,0],copy:false,copies:[],lock:null};SU.typed='';rotLast=null;updateHint();drawOverlay()}
+function suMoveApply(d){const m=SU.mv;if(!m)return;m.d=d;
+  if(m.copy)m.copies.forEach(([n,o0])=>moveObj(n,o0,d[0],d[1]));else m.orig.forEach(([id,o0])=>{const o=byId(id);if(o)moveObj(o,o0,d[0],d[1])});
+  clashDirty=true;if(is3D)suB3();else render()}
+function suCopyToggle(){const m=SU.mv||SU.rt;if(!m)return;m.copy=!m.copy;
+  if(m.copy){/* originals go back; the copies follow the pointer */m.orig.forEach(([id,o0])=>{const o=byId(id);if(o)Object.assign(o,clone(o0))});const src=m.orig.map(x=>x[1]),cl=suClones(src);cl.forEach(n=>S.objs.push(n));m.copies=cl.map((n,i)=>[n,src[i]])}
+  else{suRemove(m.copies.map(c=>c[0].id));m.copies=[]}
+  if(SU.mv)suMoveApply(m.d);else suRotApply(m.deg||0);toast(m.copy?'Copy: the original stays · type x5 after placing for five copies':'Move: no copy');updateHint()}
+function suMoveTo(raw,shift){const m=SU.mv;let d=raw.slice();
+  if(m.akey){if(m.akey==='x')d[1]=0;else d[0]=0}
+  else if(shift){if(!m.lock)m.lock=Math.abs(d[0])>=Math.abs(d[1])?'x':'y';if(m.lock==='x')d[1]=0;else d[0]=0}else{m.lock=null;if(Math.abs(d[1])*V.k<8)d[1]=0;else if(Math.abs(d[0])*V.k<8)d[0]=0}
+  suMoveApply(d)}
+function suMoveCommit(){const m=SU.mv;if(!m)return;SU.mv=null;SU.g='';
+  if(!m.d[0]&&!m.d[1]&&!m.copy&&!m.dz){suPopPast();if(is3D){build3D();if(T3&&T3.controls)T3.controls.enabled=true}render();updateHint();return}
+  SU.last={kind:'move',copy:m.copy,d:m.d.slice(),n:1,src:m.orig.map(x=>clone(x[1])),ids:m.orig.map(x=>x[0]),copies:m.copies.map(c=>c[0].id),selIds:m.ids};
+  if(m.copy)sel=new Set(m.copies.filter(([n,o0])=>m.ids.includes(o0.id)).map(c=>c[0].id));
+  SU.last.sig=suSig();SU.last.pl=past.length;markDirty();clashDirty=true;render();renderInspector();updateHint();if(is3D){build3D();if(T3&&T3.controls)T3.controls.enabled=true}}
+function suMoveCancel(){const m=SU.mv;if(!m)return;SU.mv=null;SU.g='';if(m.copy)suRemove(m.copies.map(c=>c[0].id));m.orig.forEach(([id,o0])=>{const o=byId(id);if(o){Object.keys(o).forEach(k=>{if(!(k in o0))delete o[k]});Object.assign(o,clone(o0))}});suPopPast();render();updateHint()}
+
+/* ---- Rotate (protractor: centre, then a reference direction, then the turn) ---- */
+function suRotStart(list,c){SU.rt={stage:1,c,list,a0:0,deg:0,copy:false,copies:[],orig:null,ids:list.map(o=>o.id)};SU.typed='';rotLast=null;updateHint();drawOverlay()}
+function suRotRef(w){const r=SU.rt;if(!r)return;const kit=r.list.concat(carried(r.list));r.a0=Math.hypot(w[0]-r.c[0],w[1]-r.c[1])*V.k<4?0:Math.atan2(w[1]-r.c[1],w[0]-r.c[0]);checkpoint();r.orig=kit.map(o=>[o.id,clone(o)]);r.stage=2;updateHint();drawOverlay()}
+function suRotApply(deg){const r=SU.rt;if(!r||!r.orig)return;r.deg=deg;
+  /* a copy keeps its own id and group: only the shape and place come from the original */const put=(o,o0)=>{const id=o.id,gid=o.gid;Object.keys(o).forEach(k=>{if(!(k in o0))delete o[k]});Object.assign(o,clone(o0));o.id=id;if(gid!==undefined)o.gid=gid;else delete o.gid;if(deg)turnObj(o,r.c[0],r.c[1],deg)};
+  if(r.copy)r.copies.forEach(([n,o0])=>put(n,o0));else r.orig.forEach(([id,o0])=>{const o=byId(id);if(o)put(o,o0)});clashDirty=true;if(is3D)suB3();else render()}
+function suRotAngle(w,alt){const r=SU.rt;let a=(Math.atan2(w[1]-r.c[1],w[0]-r.c[0])-r.a0)*180/Math.PI;a=((a+180)%360+360)%360-180;if(alt)return Math.round(a*10)/10;const s=Math.round(a/15)*15;return Math.abs(a-s)<=4?s:Math.round(a*2)/2}
+function suRotCommit(){const r=SU.rt;if(!r)return;SU.rt=null;if(r.stage<2){render();updateHint();return}
+  if(!r.deg&&!r.copy){suPopPast();render();updateHint();return}
+  SU.last={kind:'rot',copy:r.copy,deg:r.deg,c:r.c.slice(),n:1,src:r.orig.map(x=>clone(x[1])),ids:r.orig.map(x=>x[0]),copies:r.copies.map(c=>c[0].id),selIds:r.ids};
+  if(r.copy)sel=new Set(r.copies.filter(([n,o0])=>r.ids.includes(o0.id)).map(c=>c[0].id));
+  SU.last.sig=suSig();SU.last.pl=past.length;markDirty();clashDirty=true;render();renderInspector();updateHint();if(is3D){build3D();if(T3&&T3.controls)T3.controls.enabled=true}}
+function suRotCancel(){const r=SU.rt;if(!r)return;SU.rt=null;if(r.stage===2){if(r.copy)suRemove(r.copies.map(c=>c[0].id));else{r.deg=0;r.copy=false;r.orig.forEach(([id,o0])=>{const o=byId(id);if(o){Object.keys(o).forEach(k=>{if(!(k in o0))delete o[k]});Object.assign(o,clone(o0))}})}suPopPast()}render();updateHint()}
+
+/* ---- what was just done can still be changed by typing, as long as nothing else has touched it ---- */
+function suSig(){const L=SU.last;if(!L)return'';if(L.kind==='tp')return JSON.stringify(S.guides||[]);if(L.kind==='pp')return JSON.stringify([L.t.get(),L.t.key]);return JSON.stringify(L.ids.concat(L.copies).map(byId))}
+function suLastOK(){if(!SU.last)return false;if((SU.last.kind==='shape'?({circle:'su-circle',poly:'su-polygon',rr:'su-rrect'})[SU.last.shape&&SU.last.shape.k]:({move:'su-move',rot:'su-rotate',pp:'su-push',off:'su-offset',sc:'su-scale',tp:'su-tape'})[SU.last.kind])!==tool||suSig()!==SU.last.sig){SU.last=null;SU.typed='';return false}return true}
+/* redo the last move or turn with new numbers: one Undo step per change */
+/* a value typed straight after a move or turn changes that same step, as in SketchUp: one Undo takes back the whole operation */
+function suRedoLast(o){const L=SU.last;if(!(past.length===L.pl&&!future.length))checkpoint();
+  suRemove(L.copies);L.ids.forEach((id,i)=>{const o0=L.src[i],ob=byId(id);if(ob){Object.keys(ob).forEach(k=>{if(!(k in o0))delete ob[k]});Object.assign(ob,clone(o0))}});
+  Object.assign(L,o);L.copies=[];
+  const step=(obj,o0,k)=>{if(L.kind==='move')moveObj(obj,o0,L.d[0]*k,L.d[1]*k);else{const id=obj.id,gid=obj.gid;Object.keys(obj).forEach(q=>{if(!(q in o0))delete obj[q]});Object.assign(obj,clone(o0));obj.id=id;if(gid!==undefined)obj.gid=gid;else delete obj.gid;turnObj(obj,L.c[0],L.c[1],L.deg*k)}};
+  if(!L.copy)L.ids.forEach((id,i)=>{const ob=byId(id);if(ob)step(ob,L.src[i],1)});
+  else{const f=L.div?1/L.n:1;for(let k=1;k<=L.n;k++){const cl=suClones(L.src);cl.forEach((n,i)=>{step(n,L.src[i],k*f);S.objs.push(n);L.copies.push(n.id)})}}
+  L.sig=suSig();L.pl=past.length;markDirty();clashDirty=true;render();renderInspector();updateHint()}
+
+/* ---- Measurements box ---- */
+function suParse(t){t=String(t||'').trim();let m;
+  if((m=t.match(/^[x*]\s*(\d+)$/i)))return{n:Math.max(1,Math.min(500,+m[1])),div:false};
+  if((m=t.match(/^(\d+)\s*s$/i)))return{sides:Math.max(3,Math.min(200,+m[1]))};
+  if((m=t.match(/^\/\s*(\d+)$/)))return{n:Math.max(1,Math.min(500,+m[1])),div:true};
+  if((m=t.match(/^(-?\d*\.?\d+)\s*[,;]\s*(-?\d*\.?\d+)$/)))return{w:+m[1],d:+m[2]};
+  if((m=t.match(/^-?\d*\.?\d+$/)))return{v:+t};return null}
+function suApplyTyped(){const t=SU.typed;SU.typed='';const q=suParse(t);
+  const bad=msg=>{toast(msg);updateHint();vcbSync()};
+  if(!q)return bad('Type a number, a width and depth such as 4000,3000, or x5 or /5 for copies');
+  if(SU.rect){if(q.w==null)return bad('Type the width and depth with a comma between, e.g. 4000,3000');const a=SU.rect.a,c=SU.cur||[a[0]+1,a[1]+1];const sx=c[0]<a[0]?-1:1,sy=c[1]<a[1]?-1:1;SU.rect=null;rectFinish(a,[a[0]+sx*Math.abs(q.w),a[1]+sy*Math.abs(q.d)]);updateHint();return}
+  if(SU.mv&&SU.mv.akey==='z'){if(q.v==null)return bad('Type a height in mm');const m=SU.mv;m.dz=q.v;m.z0.forEach(([id,z])=>{const o=byId(id);if(o&&o.t==='item')o.z=Math.max(0,z+q.v)||undefined});suMoveCommit();return}
+  if(SU.mv){if(q.v==null)return bad('Type a distance in mm');const d=SU.mv.d,L=Math.hypot(d[0],d[1]);if(!L)return bad('Move the pointer the way to go, then type the distance');suMoveApply([d[0]/L*q.v,d[1]/L*q.v]);suMoveCommit();return}
+  if(SU.arc&&SU.arc.b){if(q.v==null)return bad('Type how far the arc bows, in mm');const A=SU.arc;SU.arc=null;checkpoint();const w=suArcWall(A.a,A.b,suArcSign(A.a,A.b,SU.cur||A.b,Math.abs(q.v)));S.objs.push(w);sel=new Set([w.id]);markDirty();clashDirty=true;render();renderInspector();updateHint();return}
+  if(SU.cir){if(q.sides){SU.cir.n=q.sides;P['su'+SU.cir.k+'N']=q.sides;savePrefs();drawOverlay();updateHint();vcbSync();return}if(q.v==null||q.v<=0)return bad('Type a radius in mm, or 12s for 12 sides');SU.cir.r=q.v;suCirFinish();return}
+  if(SU.rr&&SU.rr.stage===2){if(q.v==null)return bad('Type the depth in mm');const sg=SU.rr.d<0?-1:1;SU.rr.d=sg*Math.abs(q.v);const r=SU.rr;SU.rr=null;SU.lastShape={k:'rr'};suRoomAdd(suRRPts(r.a,r.b,r.d),'Room');return}
+  if(suLastOK()&&SU.last.kind==='shape'){const L=SU.last,sh=L.shape,o=byId(L.ids[0]);if(!o)return bad('Nothing to change');let pts=null;if(sh.k==='circle'||sh.k==='poly'){if(q.sides)sh.n=q.sides;else if(q.v>0)sh.r=q.v;else return bad('Type a radius or 12s');pts=suCirPts(sh.c,sh.r,sh.n,sh.a0)}else return bad('Nothing to change');if(!(past.length===L.pl&&!future.length))checkpoint();o.pts=pts;L.sig=suSig();L.pl=past.length;markDirty();clashDirty=true;render();updateHint();return}
+  if(SU.sc){if(q.v==null||q.v<=0)return bad('Type a scale factor, e.g. 1.5 or 0.5');suScaleApply(q.v);suScaleCommit();return}
+  if(suLastOK()&&SU.last.kind==='sc'){if(q.v==null||q.v<=0)return bad('Type a scale factor');const L=SU.last;if(!(past.length===L.pl&&!future.length))checkpoint();SU.sc=L.st;suScaleApply(q.v);SU.sc=null;L.f=q.v;L.sig=suSig();L.pl=past.length;markDirty();clashDirty=true;render();renderInspector();updateHint();return}
+  if(SU.tp){if(q.v==null)return bad('Type a distance in mm');const sg=SU.tp.d<0?-1:1;SU.tp.d=sg*Math.abs(q.v)*(q.v<0?-1:1);suTapeCommit();return}
+  if(suLastOK()&&SU.last.kind==='tp'){if(q.v==null)return bad('Type a distance in mm');const L=SU.last,g=S.guides[S.guides.length-1];if(!g)return bad('Nothing to change');if(!(past.length===L.pl&&!future.length))checkpoint();const sg=L.d<0?-1:1,d=sg*Math.abs(q.v)*(q.v<0?-1:1);const ng=suGuideAt(L.base,d);g.a=ng.a;g.b=ng.b;L.d=d;L.sig=suSig();L.pl=past.length;markDirty();render();updateHint();return}
+  if(SU.of){if(q.v==null)return bad('Type a distance in mm');const sg=SU.of.d<0?-1:1;suOffPreview(sg*Math.abs(q.v)*(q.v<0?-1:1));suOffCommit();return}
+  if(suLastOK()&&SU.last.kind==='off'){if(q.v==null)return bad('Type a distance in mm');const L=SU.last,sg=L.d<0?-1:1,d=sg*Math.abs(q.v)*(q.v<0?-1:1),pts=suOffsetPts(L.src,d,L.closed);if(!pts)return bad('That distance folds the outline over itself');if(!(past.length===L.pl&&!future.length))checkpoint();const o=byId(L.ids[0]);if(o)o.pts=pts;L.d=d;L.sig=suSig();L.pl=past.length;markDirty();clashDirty=true;render();renderInspector();updateHint();vcbSync();return}
+  if(SU.pp){if(q.v==null)return bad('Type a height in mm');suPPSet(q.v);suPPCommit();return}
+  if(suLastOK()&&SU.last.kind==='pp'){if(q.v==null)return bad('Type a height in mm');const L=SU.last;if(!(past.length===L.pl&&!future.length))checkpoint();L.t.set(q.v);L.v=L.t.get();L.sig=suSig();L.pl=past.length;suPPAfter();return}
+  if(SU.rt&&SU.rt.stage===2){if(q.v==null)return bad('Type an angle in degrees');if(Math.abs(q.v)>360)return bad('Type an angle between -360 and 360');suRotApply(q.v);suRotCommit();return}
+  if(suLastOK()){const L=SU.last;
+    if(q.n!=null){if(!L.copy)return bad('Hold Ctrl while moving or rotating to make a copy, then type x5');suRedoLast({n:q.n,div:q.div});toast(`${q.n} ${q.n===1?'copy':'copies'}${q.div?' spread over the distance':''}`);return}
+    if(q.v!=null){if(L.kind==='move'){const l=Math.hypot(L.d[0],L.d[1])/(L.div?1:1);if(!l)return bad('Nothing to change');suRedoLast({d:[L.d[0]/l*q.v,L.d[1]/l*q.v]})}else{if(Math.abs(q.v)>360)return bad('Type an angle between -360 and 360');suRedoLast({deg:q.v})}return}}
+  bad('Nothing to apply that to. Start a move, a turn or a rectangle first')}
+function vcbLabel(){if(SU.arc)return SU.arc.b?'Bulge':'Length';if(SU.cir)return SU.cir.c?'Radius':'Sides';if(SU.rr)return SU.rr.stage===2?'Depth':'Length';if(SU.sc||(SU.last&&SU.last.kind==='sc'&&tool==='su-scale'))return'Scale';if(SU.tp||(SU.last&&SU.last.kind==='tp'&&tool==='su-tape'))return'Distance';if(SU.of||(SU.last&&SU.last.kind==='off'&&tool==='su-offset'))return'Distance';if(SU.pp||(SU.last&&SU.last.kind==='pp'&&tool==='su-push'))return(SU.pp||SU.last).t.label;if(SU.rect)return'Dimensions';if(SU.mv)return'Distance';if(SU.rt)return SU.rt.stage===2?'Angle':'Angle';if(SU.last&&SU.last.copy&&(SU.last.kind==='move'||SU.last.kind==='rot'))return SU.last.kind==='move'?'Distance · copies':'Angle · copies';if(SU.last&&(SU.last.kind==='move'||SU.last.kind==='rot'))return SU.last.kind==='move'?'Distance':'Angle';if(tool==='poly'||tool==='spline')return'Length';if(tool==='room'||tool==='shape-rect')return'Dimensions';return'Position'}
+function vcbValue(){if(SU.typed)return SU.typed;if(SU.mv&&SU.mv.akey==='z')return'↑ '+fmt(SU.mv.dz||0);if(SU.cir)return SU.cir.c?fmt(SU.cir.r)+' · '+SU.cir.n+' sides':SU.cir.n+'';if(SU.rr)return SU.rr.stage===2?fmt(Math.abs(SU.rr.d)):SU.rr.b?fmt(Math.hypot(SU.rr.b[0]-SU.rr.a[0],SU.rr.b[1]-SU.rr.a[1])):'';if(SU.sc)return (+SU.sc.f.toFixed(3))+'';if(SU.last&&SU.last.kind==='sc'&&tool==='su-scale')return (+SU.last.f.toFixed(3))+'';if(SU.tp)return fmt(Math.abs(SU.tp.d));if(SU.last&&SU.last.kind==='tp'&&tool==='su-tape')return fmt(Math.abs(SU.last.d));if(SU.of)return fmt(Math.abs(SU.of.d));if(SU.last&&SU.last.kind==='off'&&tool==='su-offset')return fmt(Math.abs(SU.last.d));if(SU.pp)return fmt(SU.pp.t.get());if(SU.last&&SU.last.kind==='pp'&&tool==='su-push')return fmt(SU.last.t.get());if(SU.rect&&SU.cur)return fmt(Math.abs(SU.cur[0]-SU.rect.a[0]))+', '+fmt(Math.abs(SU.cur[1]-SU.rect.a[1]));if(SU.mv)return fmt(Math.hypot(SU.mv.d[0],SU.mv.d[1]));if(SU.rt)return SU.rt.stage===2?(+SU.rt.deg.toFixed(1))+'°':'';
+  if(SU.last&&(SU.last.kind==='move'||SU.last.kind==='rot')){const L=SU.last,base=L.kind==='move'?fmt(Math.hypot(L.d[0],L.d[1])):(+L.deg.toFixed(1))+'°';return base+(L.copy&&L.n>1?(L.div?' /':' x')+L.n:'')}if((tool==='poly'||tool==='spline')&&typed)return typed;return($('#coords')||{}).textContent||''}
+let vcbEl=null;
+function vcbSync(){if(!vcbEl){vcbEl=document.createElement('div');vcbEl.id='vcb';vcbEl.setAttribute('aria-live','polite');vcbEl.innerHTML='<span class="l"></span><span class="v"></span>';const m=$('#main');if(!m)return;m.appendChild(vcbEl)}
+  document.documentElement.classList.toggle('su-on',suOn());vcbEl.hidden=!suOn()||(is3D&&!['su-push','su-move','su-rotate'].includes(tool))||WALK.on||bldView;if(vcbEl.hidden)return;vcbEl.querySelector('.l').textContent=vcbLabel();vcbEl.querySelector('.v').textContent=vcbValue()||' ';vcbEl.classList.toggle('typing',!!SU.typed)}
+
+/* ---- drawing on the plan ---- */
+function suSVG(){/* runs as the plan's overlay is drawn, after the objects: fade what is outside an open group, keep the scenes bar current */try{suFade();const sg=(S.scenes||[]).map(c=>c.name).join('|')+suOn()+WALK.on+bldView;if(sg!==suBarSig){suBarSig=sg;suScenesBar()}}catch(e){}
+  if(!suOn()&&!(S.guides&&S.guides.length))return'';let s='';const st=(c,dash)=>`stroke="${c}" stroke-width="1.6" vector-effect="non-scaling-stroke" fill="none"${dash?' stroke-dasharray="6 4"':''}`;
+  const tag=(x,y,t)=>`<text class="dimtx" font-size="${fs(12)}" stroke-width="${fs(3)}" x="${x}" y="${y}" text-anchor="middle">${esc(t)}</text>`;
+  if(SU.mv){const m=SU.mv,b=m.base,e=[b[0]+m.d[0],b[1]+m.d[1]],ax=suAxis(m.d);s+=`<line x1="${b[0]}" y1="${b[1]}" x2="${e[0]}" y2="${e[1]}" ${st(SU_COL[ax],!ax)}/><circle cx="${b[0]}" cy="${b[1]}" r="${fs(4)}" fill="${SU_COL[ax]}"/><circle cx="${e[0]}" cy="${e[1]}" r="${fs(4)}" fill="none" stroke="${SU_COL[ax]}" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`;
+    if(m.d[0]||m.d[1])s+=tag((b[0]+e[0])/2,(b[1]+e[1])/2-fs(10),fmt(Math.hypot(m.d[0],m.d[1]))+(ax?ax==='x'?' · on red axis':' · on green axis':''))}
+  if(SU.rt){const r=SU.rt,c=r.c,R=fs(60),cur=SU.cur||c;s+=`<circle cx="${c[0]}" cy="${c[1]}" r="${R}" ${st('#3a6fd8',true)}/><circle cx="${c[0]}" cy="${c[1]}" r="${fs(3.5)}" fill="#3a6fd8"/>`;
+    if(r.stage===1){s+=`<line x1="${c[0]}" y1="${c[1]}" x2="${cur[0]}" y2="${cur[1]}" ${st('#3a6fd8',true)}/>`}
+    else{const a0=r.a0,a1=a0+r.deg*Math.PI/180,p=a=>[c[0]+Math.cos(a)*R*1.6,c[1]+Math.sin(a)*R*1.6],q0=p(a0),q1=p(a1),A=a=>[c[0]+Math.cos(a)*R,c[1]+Math.sin(a)*R],s0=A(a0),s1=A(a1);
+      s+=`<line x1="${c[0]}" y1="${c[1]}" x2="${q0[0]}" y2="${q0[1]}" ${st('#3a6fd8',true)}/><line x1="${c[0]}" y1="${c[1]}" x2="${q1[0]}" y2="${q1[1]}" ${st('#3a6fd8')}/>`;
+      if(r.deg)s+=`<path d="M${s0[0]} ${s0[1]}A${R} ${R} 0 ${Math.abs(r.deg)>180?1:0} ${r.deg>0?1:0} ${s1[0]} ${s1[1]}" ${st('#3a6fd8')}/>`;
+      const mid=a0+r.deg*Math.PI/360;s+=tag(c[0]+Math.cos(mid)*R*1.35,c[1]+Math.sin(mid)*R*1.35+fs(4),(+r.deg.toFixed(1))+'°')}}
+  if(SU.rect&&SU.cur){const a=SU.rect.a,b=SU.cur,x0=Math.min(a[0],b[0]),y0=Math.min(a[1],b[1]),w=Math.abs(b[0]-a[0]),h=Math.abs(b[1]-a[1]);s+=`<rect x="${x0}" y="${y0}" width="${w}" height="${h}" ${st('var(--accent)',true)}/><circle cx="${a[0]}" cy="${a[1]}" r="${fs(4)}" fill="var(--accent)"/>`;if(w&&h)s+=tag(x0+w/2,y0-fs(8),fmt(w)+' × '+fmt(h))}
+  if(S.guides&&S.guides.length){const ext=1e7;S.guides.forEach(g=>{const dx=g.b[0]-g.a[0],dy=g.b[1]-g.a[1],L=Math.hypot(dx,dy)||1,ux=dx/L*ext,uy=dy/L*ext;s+=`<line class="suguide" x1="${g.a[0]-ux}" y1="${g.a[1]-uy}" x2="${g.a[0]+ux}" y2="${g.a[1]+uy}"/>`})}
+  if(SU.tp&&SU.tp.d){const g=suGuideAt(SU.tp.base,SU.tp.d),dx=g.b[0]-g.a[0],dy=g.b[1]-g.a[1],L=Math.hypot(dx,dy)||1,ext=1e7;s+=`<line class="suguide" style="stroke:var(--accent)" x1="${g.a[0]-dx/L*ext}" y1="${g.a[1]-dy/L*ext}" x2="${g.a[0]+dx/L*ext}" y2="${g.a[1]+dy/L*ext}"/>`+tag(SU.cur?SU.cur[0]:g.a[0],(SU.cur?SU.cur[1]:g.a[1])-fs(12),fmt(Math.abs(SU.tp.d)))}
+  if(SU.sc){const c=SU.sc.c;s+=`<circle cx="${c[0]}" cy="${c[1]}" r="${fs(4)}" fill="var(--accent)"/>`;if(SU.cur)s+=`<line x1="${c[0]}" y1="${c[1]}" x2="${SU.cur[0]}" y2="${SU.cur[1]}" ${st('var(--accent)',true)}/>`+tag(SU.cur[0],SU.cur[1]-fs(12),'× '+(+SU.sc.f.toFixed(3)))}
+  if(SU.arc){const A=SU.arc;if(!A.b)s+=`<line x1="${A.a[0]}" y1="${A.a[1]}" x2="${A.e[0]}" y2="${A.e[1]}" ${st('var(--accent)',true)}/>`;else{try{const q=wallPathPts(suArcWall(A.a,A.b,A.h));s+=`<path d="M${q.map(p=>p.join(' ')).join('L')}" ${st('var(--accent)',true)}/>`}catch(e){}}}
+  if(SU.cir&&SU.cir.c&&SU.cir.r){const q=suCirPts(SU.cir.c,SU.cir.r,SU.cir.n,SU.cir.a0);s+=`<path d="M${q.map(p=>p.join(' ')).join('L')}Z" ${st('var(--accent)',true)}/><circle cx="${SU.cir.c[0]}" cy="${SU.cir.c[1]}" r="${fs(3)}" fill="var(--accent)"/>`+tag(SU.cir.c[0],SU.cir.c[1]-fs(10),'r '+fmt(SU.cir.r))}
+  if(SU.rr&&SU.rr.b){const r=SU.rr;if(r.stage===1)s+=`<line x1="${r.a[0]}" y1="${r.a[1]}" x2="${r.b[0]}" y2="${r.b[1]}" ${st('var(--accent)',true)}/>`;else{const q=suRRPts(r.a,r.b,r.d);s+=`<path d="M${q.map(p=>p.join(' ')).join('L')}Z" ${st('var(--accent)',true)}/>`}}
+  if(SU.of&&SU.of.pts){const q=SU.of.pts;s+=`<path d="M${q.map(p=>p.join(' ')).join('L')}${SU.of.closed?'Z':''}" ${st('var(--accent)',true)}/>`;const c=SU.cur||q[0];s+=tag(c[0],c[1]-fs(14),fmt(Math.abs(SU.of.d))+(SU.of.d<0?' in':' out'))}
+  if(SU.zw){const a=SU.zw.a,b=SU.zw.b;s+=`<rect x="${Math.min(a[0],b[0])}" y="${Math.min(a[1],b[1])}" width="${Math.abs(b[0]-a[0])}" height="${Math.abs(b[1]-a[1])}" ${st('var(--accent)',true)}/>`}
+  if(SU.er)SU.er.ids.forEach(id=>{const o=byId(id);if(!o)return;const b=objBox(o);s+=`<rect x="${b.x0}" y="${b.y0}" width="${b.x1-b.x0}" height="${b.y1-b.y0}" ${st('#d6332e')}/>`});
+  return s+(SU.g||'')}
+
+/* ---- pointer: these tools run ahead of the plan's own pointer handling ---- */
+svg.addEventListener('pointerdown',ev=>{
+  const rectTool=(tool==='room'||tool==='shape-rect')&&SU.rect;if((SU_TOOLS.indexOf(tool)<0||tool==='su-push')&&!rectTool)return;
+  if(ev.button!==0||spaceDown||(ev.pointerType==='touch'&&pointers.size>0))return;
+  ev.stopImmediatePropagation();ev.preventDefault();closePops();const w=pointerWorld(ev);SU.cur=w;SU.downAt=[ev.clientX,ev.clientY];
+  if(rectTool){const b=pointSnap(w,{alt:ev.altKey}).p;const a=SU.rect.a;SU.rect=null;rectFinish(a,b);return}
+  if(tool==='su-move'){if(SU.mv){suMoveCommit();SU.downAt=null;return}const l=suTargets(ev);if(!l){toast('Click the object to move, or select first');return}suMoveStart(l,pointSnap(w,{alt:ev.altKey,ids:new Set(l.concat(carried(l)).map(o=>o.id))}).p);return}
+  if(tool==='su-rotate'){if(!SU.rt){const l=suTargets(ev);if(!l){toast('Select what to rotate first, or click it');return}suRotStart(l,pointSnap(w,{alt:ev.altKey}).p);return}
+    if(SU.rt.stage===1){suRotRef(pointSnap(w,{alt:ev.altKey}).p);return}suRotCommit();SU.downAt=null;return}
+  if(tool==='su-erase'){checkpoint();SU.er={ids:[]};suEraseAt(ev);return}
+  if(tool==='su-zwin'){if(SU.zw){suZoomWinEnd(w);return}SU.zw={a:w,b:w};return}
+  if(tool==='su-arc'){const p=pointSnap(w,{alt:ev.altKey}).p;if(!SU.arc){SU.arc={a:p,b:null,h:0,e:p};updateHint();return}if(!SU.arc.b){if(Math.hypot(p[0]-SU.arc.a[0],p[1]-SU.arc.a[1])<100)return;SU.arc.b=p;updateHint();return}const A=SU.arc;SU.arc=null;checkpoint();const wl=suArcWall(A.a,A.b,A.h);S.objs.push(wl);sel=new Set([wl.id]);markDirty();clashDirty=true;render();renderInspector();updateHint();return}
+  if(tool==='su-circle'||tool==='su-polygon'){const p=pointSnap(w,{alt:ev.altKey}).p;if(SU.cir&&SU.cir.c){suCirFinish();SU.downAt=null;return}const k=tool==='su-circle'?'circle':'poly';SU.cir={k,c:p,r:0,n:(SU.cir&&SU.cir.n)||+P['su'+k+'N']||(k==='circle'?24:6),a0:0};SU.typed='';updateHint();return}
+  if(tool==='su-rrect'){const p=pointSnap(w,{alt:ev.altKey}).p;if(!SU.rr){SU.rr={a:p,b:null,stage:1,d:0};updateHint();return}if(SU.rr.stage===1){if(!SU.rr.b||Math.hypot(SU.rr.b[0]-SU.rr.a[0],SU.rr.b[1]-SU.rr.a[1])<100)return;SU.rr.stage=2;updateHint();return}const r=SU.rr;SU.rr=null;SU.lastShape={k:'rr'};suRoomAdd(suRRPts(r.a,r.b,r.d),'Room');return}
+  if(tool==='su-scale'){if(SU.sc){suScaleCommit();SU.downAt=null;return}const l=suTargets(ev);if(!l){toast('Select what to scale, or click it');return}suScaleStart(l,w);return}
+  if(tool==='su-tape'){if(SU.tp){suTapeCommit();SU.downAt=null;return}suTapeStart(w);return}
+  if(tool==='su-offset'){if(SU.of){suOffCommit();return}const el=ev.target.closest&&ev.target.closest('[data-id]');suOffStart(el?byId(el.dataset.id):null);return}
+},true);
+function suEraseAt(ev){const el=document.elementFromPoint(ev.clientX,ev.clientY);const h=el&&el.closest&&el.closest('[data-id]');const o=h?byId(h.dataset.id):null;if(!o||fixed(o)||SU.er.ids.includes(o.id))return;SU.er.ids.push(o.id);drawOverlay()}
+svg.addEventListener('pointermove',ev=>{if(vcbEl&&!vcbEl.hidden&&!suBusy()&&!SU.typed&&!SU.last)requestAnimationFrame(()=>{if(vcbEl&&!suBusy()&&!SU.last&&!SU.typed)vcbEl.querySelector('.v').textContent=($('#coords')||{}).textContent||''});if(!SU_TOOLS.includes(tool)&&!SU.rect)return;const w=toWorld(ev);SU.cur=w;
+  if(SU.er){suEraseAt(ev);return}
+  if(SU.zw){SU.zw.b=w;drawOverlay();return}
+  if(SU.of){suOffPreview(suOffDist(w));vcbSync();return}
+  if(SU.arc){const p=pointSnap(w,{alt:ev.altKey}).p;if(!SU.arc.b)SU.arc.e=p;else{const[a,b]=[SU.arc.a,SU.arc.b],dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy)||1;const d=Math.abs(((p[0]-a[0])*-dy+(p[1]-a[1])*dx)/L);SU.arc.h=suArcSign(a,b,p,Math.round(Math.min(d,L/2)/10)*10)}drawOverlay();vcbSync();updateHint();return}
+  if(SU.cir&&SU.cir.c){const p=pointSnap(w,{alt:ev.altKey}).p;SU.cir.r=Math.round(Math.hypot(p[0]-SU.cir.c[0],p[1]-SU.cir.c[1]));SU.cir.a0=Math.atan2(p[1]-SU.cir.c[1],p[0]-SU.cir.c[0]);drawOverlay();vcbSync();updateHint();return}
+  if(SU.rr){const p=pointSnap(w,{alt:ev.altKey}).p;if(SU.rr.stage===1)SU.rr.b=p;else{const[a,b]=[SU.rr.a,SU.rr.b],dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy)||1;SU.rr.d=Math.round(((p[0]-a[0])*-dy+(p[1]-a[1])*dx)/L/10)*10}drawOverlay();vcbSync();return}
+  if(SU.sc){const c=SU.sc.c,d=Math.hypot(w[0]-c[0],w[1]-c[1]);let f=d/SU.sc.r0;f=ev.altKey?Math.round(f*1000)/1000:Math.max(0.05,Math.round(f*20)/20);suScaleApply(f);vcbSync();return}
+  if(SU.tp){SU.tp.d=suTapeDist(w);drawOverlay();vcbSync();updateHint();return}
+  if(SU.mv){const ex=new Set(SU.mv.orig.map(x=>x[0]).concat(SU.mv.copies.map(c=>c[0].id)));const sn=pointSnap(w,{alt:ev.altKey,ids:ex});SU.mv.raw=[sn.p[0]-SU.mv.base[0],sn.p[1]-SU.mv.base[1]];SU.g=sn.g;suMoveTo(SU.mv.raw,ev.shiftKey);vcbSync();return}
+  if(SU.rt){if(SU.rt.stage===2)suRotApply(suRotAngle(w,ev.altKey));else drawOverlay();vcbSync();return}
+  if(SU.rect){SU.cur=pointSnap(w,{alt:ev.altKey}).p;vcbSync()}
+},true);
+svg.addEventListener('pointerup',ev=>{if(SU.zw&&SU.downAt&&Math.hypot(ev.clientX-SU.downAt[0],ev.clientY-SU.downAt[1])>8){suZoomWinEnd(toWorld(ev));SU.downAt=null;return}if(SU.er){const ids=SU.er.ids;SU.er=null;suPopPast();if(ids.length){sel=new Set(ids);deleteSel(false);toast(ids.length===1?'Erased':`Erased ${ids.length}`)}else render();return}
+  /* press, drag, release also works: the release puts it down */
+  if(SU.downAt&&Math.hypot(ev.clientX-SU.downAt[0],ev.clientY-SU.downAt[1])>8){if(SU.sc)suScaleCommit();else if(SU.tp)suTapeCommit();else if(SU.mv)suMoveCommit();else if(SU.rt&&SU.rt.stage===2)suRotCommit()}SU.downAt=null},true);
+
+/* ---- keys ---- */
+function suKey(e,k,mod){
+  if(e.key==='Control'&&!e.repeat&&(SU.mv||(SU.rt&&SU.rt.stage===2))){e.preventDefault();suCopyToggle();return true}
+  if(mod)return false;
+  if(e.key==='Escape'&&SU.gctx&&!SU.typed&&!suBusy()){e.preventDefault();suGroupLeave();return true}
+  if(SU.mv&&/^Arrow/.test(e.key)){e.preventDefault();const m=SU.mv;if(e.key==='ArrowRight')m.akey=m.akey==='x'?null:'x';else if(e.key==='ArrowLeft')m.akey=m.akey==='y'?null:'y';else if(e.key==='ArrowUp'&&!is3D)toast('Blue axis is height: use Move in 3D');else if(e.key==='ArrowUp'&&is3D){m.akey=m.akey==='z'?null:'z';if(m.akey==='z'){m.d=[0,0];suMoveApply([0,0])}else m.z0.forEach(([id,z])=>{const o=byId(id);if(o){if(z)o.z=z;else delete o.z}});toast(m.akey==='z'?'Blue axis: move up or down to lift':'Blue axis off');updateHint();return true}else toast('Parallel lock comes with the full snap hints');if(m.raw)suMoveTo(m.raw,e.shiftKey);updateHint();return true}
+  if(e.key==='F8'&&suOn()){e.preventDefault();suPrevView();return true}
+  if((tool==='su-circle'||tool==='su-polygon')&&!SU.cir&&!suLastOK())SU.cir={k:tool==='su-circle'?'circle':'poly',c:null,r:0,n:+P['su'+(tool==='su-circle'?'circle':'poly')+'N']||(tool==='su-circle'?24:6),a0:0};
+  const live=suBusy()||suLastOK()||(SU.rect&&(tool==='room'||tool==='shape-rect'));
+  if(live&&!SU.er){
+    if(/^[0-9.,;]$/.test(e.key)||((e.key==='s'||e.key==='S')&&/^\d+$/.test(SU.typed)&&(tool==='su-circle'||tool==='su-polygon'))||(e.key==='-'&&!SU.typed)||((e.key==='x'||e.key==='X'||e.key==='*'||e.key==='/')&&!SU.typed&&!SU.rect)){SU.typed+=e.key;updateHint();vcbSync();e.preventDefault();return true}
+    if(SU.typed&&e.key==='Backspace'){SU.typed=SU.typed.slice(0,-1);updateHint();vcbSync();e.preventDefault();return true}
+    if(SU.typed&&e.key==='Enter'){e.preventDefault();suApplyTyped();vcbSync();return true}
+    if(e.key==='Escape'&&SU.arc&&!SU.typed){e.preventDefault();SU.arc=null;render();updateHint();return true}
+  if(e.key==='Escape'&&(SU.cir||SU.rr)&&!SU.typed){e.preventDefault();SU.cir=null;SU.rr=null;render();updateHint();return true}
+  if(e.key==='Escape'){e.preventDefault();if(SU.typed){SU.typed=''}else if(SU.sc)suScaleCancel();else if(SU.tp){SU.tp=null;render()}else if(SU.of){SU.of=null;render()}else if(SU.pp)suPPCancel();else if(SU.mv)suMoveCancel();else if(SU.rt)suRotCancel();else if(SU.rect){SU.rect=null;render()}else{SU.last=null;updateHint();vcbSync();return false}updateHint();vcbSync();return true}}
+  if(!suOn()||e.altKey)return false;
+  if(tool==='place'&&(k==='r'||k==='x'))return false;
+  /* SketchUp's default keys. StoreyBook's own keys that do not clash keep working */
+  const map={l:'poly',r:'room',m:'su-move',q:'su-rotate',e:'su-erase',t:'su-tape',b:'paint',h:'pan',f:'su-offset',s:'su-scale',c:'su-circle',a:'su-arc'};
+  if(map[k]&&!e.shiftKey){setTool(map[k]);return true}
+  if(k==='o'&&!e.shiftKey){if(!is3D)set3D(true);toast('Orbit: drag in the 3D view · Tab goes back to the plan');return true}
+  if(k==='p'&&!e.shiftKey){setTool('su-push');return true}
+  if(k==='z'&&e.shiftKey){if(is3D)frame3D('persp');else fit();return true}
+  if(k==='g'&&!e.shiftKey){suCompMake();return true}
+  if(k==='k'&&!e.shiftKey){$('#t-lib').click();return true}
+  return false}
+
+/* ---- the welcome card and cheat sheet ---- */
+const SU_SHEET=[['Select','Space','Space (tap)','select'],['Line','L','L · walls','poly'],['Rectangle','R','R · room, click two corners or type 4000,3000','room'],['Move','M','M · Ctrl copies, then x5','su-move'],['Rotate','Q','Q · protractor, type an angle','su-rotate'],['Eraser','E','E · click or drag across','su-erase'],['Tape measure','T','T · click an edge and pull out a guide line; type the distance','su-tape'],['Dimension','','Measure button in the toolbar','measure'],['Scale','S','S · click the selection, pull, type a factor such as 1.5','su-scale'],['Search','','Ctrl+K (S is Scale with SketchUp keys)',''],['Paint bucket','B','B · search Materials for named colours','paint'],['Styles','','search Style: shaded, hidden line, sketchy edges',''],['Pan','H','H, or hold Space and drag','pan'],['Orbit','O','O opens 3D','3d'],['Arc','A','A · click both ends, then how far it bows; type the bulge; makes a curved wall','su-arc'],['Circle','C','C · round room: click the centre, then the radius, or type it; type 12s for 12 sides','su-circle'],['Polygon','','Search Polygon · type 6s for six sides','su-polygon'],['Rotated rectangle','','Search Rotated rectangle · two clicks for one side, then the depth','su-rrect'],['Ceiling plan','','search Ceiling (C is Circle with SketchUp keys)',''],['Offset','F','F · room outline or wall in or out, type a distance','su-offset'],['Zoom extents','Shift+Z','Shift+Z','fit'],['Make component','G','G · copies share one definition; double-click a copy to edit them all','comp'],['Make group','','right-click › Make group','group'],['Outliner','','search Outliner · components, groups and rooms; Purge unused',''],['Push/Pull','P','P · item height; wall or floor sets floor to ceiling; type a value','su-push'],['Components','','Library: K, or the Library button','lib']];
+function suSheetOpen(first){let m=$('#su-modal');if(!m){m=document.createElement('div');m.id='su-modal';m.className='keys-modal';m.hidden=true;m.setAttribute('data-keep','');m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');m.setAttribute('aria-labelledby','su-h');document.body.appendChild(m);
+    m.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.su==='x'){m.hidden=true;return}if(b.dataset.su==='on'||b.dataset.su==='off'){P.suKeys=b.dataset.su==='on';P.suWelcome=1;savePrefs();suTips();m.hidden=true;toast(P.suKeys?'SketchUp keys on':'StoreyBook keys');updateHint();vcbSync()}})}
+  m.innerHTML=`<div class="keys-card" style="height:auto;max-width:560px"><div class="keys-head"><h3 id="su-h">${first?'Coming from SketchUp?':'SketchUp keys and tools'}</h3><span style="flex:1"></span><button class="btn icon ghost sm" type="button" data-su="x" aria-label="Close">✕</button></div><div style="padding:14px 16px;max-height:60vh;overflow:auto">
+    <p class="muted" style="margin:0 0 8px">The tools work the way SketchUp's do: click to pick up, click to put down, and type a value straight after into the Measurements box at the bottom right. Rooms and walls are still StoreyBook objects, so the MIG, PSM, fire and cost checks keep working.</p>
+    <table class="kv-t" style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th style="text-align:left;padding:4px">SketchUp</th><th style="text-align:left;padding:4px">Key</th><th style="text-align:left;padding:4px">In StoreyBook</th></tr></thead><tbody>${SU_SHEET.map(r=>`<tr><td style="padding:4px;border-top:1px solid var(--line)">${r[0]}</td><td style="padding:4px;border-top:1px solid var(--line)"><kbd>${r[1]||'–'}</kbd></td><td style="padding:4px;border-top:1px solid var(--line)">${esc(r[2])}</td></tr>`).join('')}</tbody></table>
+    <p class="muted" style="margin:8px 0 0">Red and green lines show you are on an axis. Shift locks it. Alt turns snapping off. Search (S) still finds every command.</p></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;padding:0 16px 14px"><button class="btn" type="button" data-su="off">${P.suKeys===false?'Keep StoreyBook keys':'Use StoreyBook keys'}</button><button class="btn primary" type="button" data-su="on">Use SketchUp keys</button></div></div>`;
+  m.hidden=false;if(first&&!P.suWelcome){P.suWelcome=1;savePrefs()}setTimeout(()=>{const b=m.querySelector('[data-su=on]');if(b)b.focus()},0)}
+/* dock buttons say what they are in SketchUp */
+function suTips(){suNames();try{suScenesBar()}catch(e){}{const sl=$('#s-keys');if(sl)sl.value=suOn()?'su':'sb'}const nm={select:'Select (SketchUp: Space)',poly:'Walls (SketchUp: Line, L)',room:'Room (SketchUp: Rectangle, R)',measure:'Measure (SketchUp: Tape measure, T)',paint:'Paint (SketchUp: Paint bucket, B)',pan:'Pan (SketchUp: H)'};
+  $$('.dock [data-tool]').forEach(b=>{if(!b.dataset.t0)b.dataset.t0=b.getAttribute('title')||'';const t=suOn()&&nm[b.dataset.tool];b.setAttribute('title',t||b.dataset.t0)})}
+/* the three SketchUp tools that StoreyBook did not have get dock buttons after Select */
+(()=>{const d=$('.dock [data-tool="select"]');if(!d)return;const ic={'su-move':'<path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/>','su-rotate':'<path d="M20 12a8 8 0 1 1-3-6.2"/><path d="M20 4v5h-5"/>','su-erase':'<path d="M4 16l8-8 6 6-6 6H8z"/><path d="M14 20h6"/>'};
+  const lab={'su-move':'Move (SketchUp: M)','su-rotate':'Rotate (SketchUp: Q)','su-erase':'Eraser (SketchUp: E)'};let at=d;
+  ic['su-push']='<path d="M5 20h14"/><path d="M7 16V9h10v7"/><path d="M12 3v8M9 6l3-3 3 3"/>';lab['su-push']='Push/Pull (SketchUp: P)';
+  ['su-move','su-rotate','su-erase','su-push'].forEach(t=>{const b=document.createElement('button');b.type='button';b.className=d.className.replace(/\bon\b/,'').trim();b.dataset.tool=t;b.setAttribute('title',lab[t]);b.setAttribute('aria-label',lab[t]);b.innerHTML=`<svg class="ic" viewBox="0 0 24 24">${ic[t]}</svg>${{'su-move':'Move','su-rotate':'Rotate','su-erase':'Eraser','su-push':'Push/Pull'}[t]}`;b.addEventListener('click',()=>setTool(t));at.after(b);at=b})})();
+(()=>{const st=document.createElement('style');st.textContent=`#vcb{position:absolute;right:max(12px,env(safe-area-inset-right,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:9;display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 10px;font-size:12px;min-width:170px;max-width:240px;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.12)}.su-on .coords{visibility:hidden}#vcb[hidden]{display:none}#vcb .l{color:var(--muted)}#vcb .v{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:500}#vcb.typing{border-color:var(--accent)}#vcb.typing .v{color:var(--accent)}@media (pointer:coarse),(max-width:820px){#vcb{display:none}}`;document.head.appendChild(st)})();
+setTimeout(()=>{suTips();vcbSync();if(!location.hash.endsWith('-debug')&&!P.suWelcome)suSheetOpen(true)},600);
+
+/* ---- test 2: selection rules, flip, zoom window, previous view, hide and isolate, SketchUp names ---- */
+/* Ctrl adds, Shift adds or removes, Ctrl+Shift removes (StoreyBook keys: Shift or Ctrl add or remove) */
+function suSelMode(ev){if(multiMode||!suOn())return'tog';const c=ev.ctrlKey||ev.metaKey,sh=ev.shiftKey;return c&&sh?'sub':c?'add':'tog'}
+function suPushView(){const v={x:V.x,y:V.y,k:V.k},l=SU.views[SU.views.length-1];if(l&&l.x===v.x&&l.y===v.y&&l.k===v.k)return;SU.views.push(v);if(SU.views.length>30)SU.views.shift()}
+function suPrevView(){if(is3D)return toast('Previous view works on the plan');const v=SU.views.pop();if(!v)return toast('No earlier view');V.x=v.x;V.y=v.y;V.k=v.k;applyView();render()}
+function suZoomWinEnd(w){const a=SU.zw.a;SU.zw=null;const b={x0:Math.min(a[0],w[0]),y0:Math.min(a[1],w[1]),x1:Math.max(a[0],w[0]),y1:Math.max(a[1],w[1])};if((b.x1-b.x0)*V.k<10||(b.y1-b.y0)*V.k<10){toast('Drag a larger box');render();return}fitBox(b);setTool('select')}
+function suZoomSel(){const l=selList();if(!l.length)return;const b=unionBox(l);if(!b)return;const p=Math.max(500,(b.x1-b.x0+b.y1-b.y0)*0.08);fitBox({x0:b.x0-p,y0:b.y0-p,x1:b.x1+p,y1:b.y1+p})}
+/* mirror the selection about its own centre: red flips x, green flips y. Rooms take their contents */
+function suFlip(axis){let l=selList().filter(o=>!fixed(o));if(!l.length)return;const b=unionBox(l);l=l.concat(carried(l));checkpoint();const cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2;
+  const n=d=>+(((d%360)+360)%360).toFixed(3),F=p=>axis==='x'?[Math.round(2*cx-p[0]),p[1]]:[p[0],Math.round(2*cy-p[1])];
+  l.forEach(o=>{if(o.t==='item'||o.t==='text'){const q=F([o.x,o.y]);o.x=q[0];o.y=q[1];o.r=n(axis==='x'?-(o.r||0):180-(o.r||0));if(o.t==='item'){if(o.flip)delete o.flip;else o.flip=true}else if(!o.r)delete o.r}
+    else if(o.t==='room'||o.t==='wall'||o.t==='trunk'){o.pts=o.pts.map(F);if(Array.isArray(o.bulge))o.bulge=o.bulge.map(v=>v?-v:v)}
+    else if(o.t==='dim'){o.a=F(o.a);o.b=F(o.b)}});
+  markDirty();clashDirty=true;render();renderInspector();if(is3D)build3D();toast(axis==='x'?'Flipped along red':'Flipped along green')}
+function suHide(iso){const keep=selList();if(!keep.length)return;const ids=new Set(keep.concat(carried(keep)).map(o=>o.id));
+  if(iso)S.objs.forEach(o=>{if(!ids.has(o.id))SU.hidden.add(o.id)});else ids.forEach(id=>SU.hidden.add(id));if(!iso)sel.clear();clashDirty=true;render();renderInspector();updateHint();if(is3D)build3D();toast(iso?'Everything else hidden · right-click › Unhide all':'Hidden · right-click › Unhide all')}
+function suUnhide(){SU.hidden.clear();clashDirty=true;render();renderInspector();updateHint();if(is3D)build3D();toast('Everything shown')}
+$('#ctxmenu').addEventListener('click',e=>{const b=e.target.closest('[data-cm]');if(!b||!/^su-/.test(b.dataset.cm))return;const a=b.dataset.cm;$('#ctxmenu').hidden=true;
+  if(a==='su-comp')suCompMake();else if(a==='su-cedit'){const o=selList().find(x=>x.cmp);if(o)suGroupEnter(o.gid)}else if(a==='su-cuniq')suCompUnique();else if(a==='su-cexp')suCompExplode();else if(a==='su-scene')suSceneAdd();else if(a==='su-guidesx')suGuidesClear();else if(a==='su-offset'){const o=selList()[0];setTool('su-offset');suOffStart(o)}else if(a==='su-zsel')suZoomSel();else if(a==='su-flipx')suFlip('x');else if(a==='su-flipy')suFlip('y');else if(a==='su-hide')suHide(false);else if(a==='su-iso')suHide(true);else if(a==='su-unhide')suUnhide();else if(a==='su-zwin')setTool('su-zwin');else if(a==='su-prev')suPrevView()});
+/* SketchUp names for the panels */
+function suLabel(el,txt){if(!el)return;if(!el.dataset.l0){const t=[...el.childNodes].filter(n=>n.nodeType===3).pop();el.dataset.l0=t?t.textContent:''}const t=[...el.childNodes].filter(n=>n.nodeType===3).pop();if(t)t.textContent=txt||el.dataset.l0}
+function suNames(){const on=suOn();suLabel($('#t-insp'),on?'Entity Info':'');suLabel($('#t-layers'),on?'Tags':'');suLabel($('#m-axes'),on?'Axes tool: turn the plan…':'');
+  const h=[...document.querySelectorAll('h3')].find(x=>x.textContent==='Layers'||x.textContent==='Tags');if(h)h.textContent=on?'Tags':'Layers';const ah=document.querySelector('#axes-modal h3');if(ah)ah.textContent=on?'Axes tool':'Design axes';
+  if(T3&&T3.controls&&T3.THREE)T3.controls.mouseButtons.MIDDLE=on?T3.THREE.MOUSE.ROTATE:T3.THREE.MOUSE.PAN}
+/* 3D: a double click of the middle button centres the orbit on that point */
+$('#v3c')&&$('#v3c').addEventListener('auxclick',e=>{if(e.button!==1||e.detail<2||!suOn()||!T3||WALK.on)return;const p=floorAt(e);if(!p)return;const c=T3.controls,nx=p[0]*0.001,nz=p[1]*0.001,dx=nx-c.target.x,dz=nz-c.target.z;c.target.x+=dx;c.target.z+=dz;T3.camera.position.x+=dx;T3.camera.position.z+=dz;c.update();toast('Orbit centred here')});
+/* ---- inference: the point hints SketchUp users read without thinking ---- */
+const SU_IC={end:['#2f9a3a','Endpoint'],mid:['#0aa5c8','Midpoint'],edge:['#d6332e','On Edge'],par:['#c83ab4','Parallel to edge'],perp:['#c83ab4','Perpendicular to edge'],int:['#1b6fd1','Intersection']};
+function suSegs(ids){const out=[];S.objs.forEach(o=>{if(ids&&ids.has(o.id))return;if(!visible(o))return;if(o.t==='room'&&o.pts)o.pts.forEach((p,i)=>out.push([p,o.pts[(i+1)%o.pts.length]]));else if(o.t==='wall')wallSegs(o).forEach(sg=>out.push(sg))});(S.guides||[]).forEach(g=>{const dx=g.b[0]-g.a[0],dy=g.b[1]-g.a[1],L=Math.hypot(dx,dy)||1,e=1e6;out.push([[g.a[0]-dx/L*e,g.a[1]-dy/L*e],[g.a[0]+dx/L*e,g.a[1]+dy/L*e]])});return out}
+function suMark(p,k){const [c,l]=SU_IC[k],r=fs(5);const shape=k==='end'?`<rect x="${p[0]-r}" y="${p[1]-r}" width="${2*r}" height="${2*r}" fill="${c}" fill-opacity=".25" stroke="${c}" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`:k==='mid'?`<path d="M${p[0]} ${p[1]-r*1.3}L${p[0]+r*1.2} ${p[1]+r}L${p[0]-r*1.2} ${p[1]+r}Z" fill="${c}" fill-opacity=".25" stroke="${c}" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`:k==='int'?`<path d="M${p[0]-r} ${p[1]-r}L${p[0]+r} ${p[1]+r}M${p[0]+r} ${p[1]-r}L${p[0]-r} ${p[1]+r}" stroke="${c}" stroke-width="2" vector-effect="non-scaling-stroke"/>`:`<path d="M${p[0]} ${p[1]-r}L${p[0]+r} ${p[1]}L${p[0]} ${p[1]+r}L${p[0]-r} ${p[1]}Z" fill="${c}" fill-opacity=".25" stroke="${c}" stroke-width="1.6" vector-effect="non-scaling-stroke"/>`;
+  return shape+`<text class="sulab" x="${p[0]+fs(9)}" y="${p[1]-fs(9)}" font-size="${fs(11)}" fill="${c}" stroke="var(--bg)" stroke-width="${fs(3)}" paint-order="stroke">${l}</text>`}
+function suInfer(w,tol,T,opt){const ids=opt.ids||null;let verts=T.verts;if(polyPts&&polyPts.length>1)verts=verts.concat(polyPts.slice(0,-1));
+  let b=null;verts.forEach(v=>{const d=Math.hypot(v[0]-w[0],v[1]-w[1]);if(d<tol&&(!b||d<b.d))b={d,v}});if(b)return{p:[b.v[0],b.v[1]],g:suMark(b.v,'end'),k:'end'};
+  const segs=suSegs(ids).filter(([a,c])=>w[0]>=Math.min(a[0],c[0])-tol&&w[0]<=Math.max(a[0],c[0])+tol&&w[1]>=Math.min(a[1],c[1])-tol&&w[1]<=Math.max(a[1],c[1])+tol);
+  let m=null;segs.forEach(([a,c])=>{const q=[(a[0]+c[0])/2,(a[1]+c[1])/2],d=Math.hypot(q[0]-w[0],q[1]-w[1]);if(d<tol&&(!m||d<m.d))m={d,q}});if(m)return{p:[Math.round(m.q[0]),Math.round(m.q[1])],g:suMark(m.q,'mid'),k:'mid'};
+  /* two edges crossing near the pointer */
+  const near=segs.map(sg=>{const[a,c]=sg,dx=c[0]-a[0],dy=c[1]-a[1],L2=dx*dx+dy*dy;if(!L2)return null;const t=Math.max(0,Math.min(1,((w[0]-a[0])*dx+(w[1]-a[1])*dy)/L2)),q=[a[0]+dx*t,a[1]+dy*t],d=Math.hypot(q[0]-w[0],q[1]-w[1]);return d<tol?{sg,q,d}:null}).filter(Boolean).sort((x,y)=>x.d-y.d);
+  for(let i=0;i<near.length;i++)for(let j=i+1;j<near.length;j++){const X=suCross(near[i].sg,near[j].sg);if(X&&Math.hypot(X[0]-w[0],X[1]-w[1])<tol)return{p:[Math.round(X[0]),Math.round(X[1])],g:suMark(X,'int'),k:'int'}}
+  if(near.length){const q=near[0].q;return{p:[Math.round(q[0]),Math.round(q[1])],g:suMark(q,'edge'),k:'edge'}}
+  /* while drawing walls: parallel or perpendicular to an edge of the plan */
+  if(polyPts&&polyPts.length){const o=polyPts[polyPts.length-1],vx=w[0]-o[0],vy=w[1]-o[1],L=Math.hypot(vx,vy);if(L*V.k>20){const ang=Math.atan2(vy,vx);let best=null;
+    suSegs(ids).forEach(([a,c])=>{const sa=Math.atan2(c[1]-a[1],c[0]-a[0]);if(Math.abs(Math.sin(sa))<1e-6||Math.abs(Math.cos(sa))<1e-6)return;[[0,'par'],[Math.PI/2,'perp']].forEach(([off,k])=>{const t=sa+off;let dd=((ang-t)%Math.PI+Math.PI*1.5)%Math.PI-Math.PI/2;if(Math.abs(dd)<0.035&&(!best||Math.abs(dd)<Math.abs(best.dd)))best={dd,t,k}})});
+    if(best){const ux=Math.cos(best.t),uy=Math.sin(best.t),pr=vx*ux+vy*uy,q=[Math.round(o[0]+ux*pr),Math.round(o[1]+uy*pr)];return{p:q,g:`<line x1="${o[0]}" y1="${o[1]}" x2="${q[0]}" y2="${q[1]}" stroke="#c83ab4" stroke-dasharray="6 4" stroke-width="1.4" vector-effect="non-scaling-stroke"/>`+suMark(q,best.k),k:best.k}}}}
+  return null}
+function suCross(s1,s2){const[a,b]=s1,[c,d]=s2,r=[b[0]-a[0],b[1]-a[1]],q=[d[0]-c[0],d[1]-c[1]],den=r[0]*q[1]-r[1]*q[0];if(Math.abs(den)<1e-9)return null;const t=((c[0]-a[0])*q[1]-(c[1]-a[1])*q[0])/den,u=((c[0]-a[0])*r[1]-(c[1]-a[1])*r[0])/den;if(t<-0.001||t>1.001||u<-0.001||u>1.001)return null;return[a[0]+r[0]*t,a[1]+r[1]*t]}
+
+/* ---- Offset (F): a new outline a set distance inside or outside a room, or beside a wall; the original stays ---- */
+function suOffsetPts(pts,d,closed){const n=pts.length;if(n<2)return null;let sg=1;if(closed){sg=polyArea(pts)>0?1:-1;if(polyArea(pts)===0)return null}
+  /* edge normals pointing out of the room (closed) or to the left (open) */
+  const off=[];for(let i=0;i<(closed?n:n-1);i++){const a=pts[i],b=pts[(i+1)%n],dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy);if(!L)return null;const nx=dy/L*sg,ny=-dx/L*sg;off.push([[a[0]+nx*d,a[1]+ny*d],[b[0]+nx*d,b[1]+ny*d]])}
+  const line=(s1,s2)=>{const[a,b]=s1,[c,e]=s2,r=[b[0]-a[0],b[1]-a[1]],q=[e[0]-c[0],e[1]-c[1]],den=r[0]*q[1]-r[1]*q[0];if(Math.abs(den)<1e-9)return[b[0],b[1]];const t=((c[0]-a[0])*q[1]-(c[1]-a[1])*q[0])/den;return[a[0]+r[0]*t,a[1]+r[1]*t]};
+  const out=[];if(closed){for(let i=0;i<n;i++)out.push(line(off[(i-1+n)%n],off[i]))}else{out.push(off[0][0]);for(let i=1;i<off.length;i++)out.push(line(off[i-1],off[i]));out.push(off[off.length-1][1])}
+  const r=out.map(p=>[Math.round(p[0]),Math.round(p[1])]);if(closed&&(Math.sign(polyArea(r))!==Math.sign(polyArea(pts))||Math.abs(polyArea(r))<1e4))return null;return r}
+function suOffStart(o){if(!o||fixed(o)||!(o.t==='room'||(o.t==='wall'&&!o.spline&&!(Array.isArray(o.bulge)&&o.bulge.some(Boolean))))){toast('Click a room or a straight wall to offset');return}
+  const closed=o.t==='room'||!!o.closed;SU.of={o,closed,src:o.pts.map(p=>p.slice()),d:0,pts:null};SU.typed='';sel=new Set([o.id]);render();updateHint()}
+function suOffDist(w){const f=SU.of,P_=f.src,n=P_.length;let best=Infinity,side=1;for(let i=0;i<(f.closed?n:n-1);i++){const a=P_[i],b=P_[(i+1)%n],dx=b[0]-a[0],dy=b[1]-a[1],L2=dx*dx+dy*dy;if(!L2)continue;const t=Math.max(0,Math.min(1,((w[0]-a[0])*dx+(w[1]-a[1])*dy)/L2)),q=[a[0]+dx*t,a[1]+dy*t],d=Math.hypot(w[0]-q[0],w[1]-q[1]);if(d<best){best=d;side=((dx*(w[1]-a[1])-dy*(w[0]-a[0]))<0)?1:-1}}
+  let d=f.closed?(pointInPoly(w[0],w[1],P_)?-best:best):best*side*(polyArea(P_)>0?1:1);const st=P.snap?(+P.snapSize||10):10;return Math.round(d/st)*st}
+function suOffPreview(d){const f=SU.of;f.d=d;f.pts=d?suOffsetPts(f.src,d,f.closed):null;drawOverlay();updateHint()}
+function suOffCommit(){const f=SU.of;if(!f)return;SU.of=null;if(!f.pts||!f.d){toast(f.d?'That distance folds the outline over itself':'Move in or out first, or type a distance');render();updateHint();return}
+  checkpoint();const n=clone(f.o);n.id=uid();n.pts=f.pts;if(n.arr)delete n.arr;n.gid=null;if(n.t==='room'){n.name=(f.o.name||'Room')+' (offset)';delete n.zone;delete n.tpl;delete n.tp}S.objs.push(n);sel=new Set([n.id]);
+  SU.last={kind:'off',ids:[n.id],copies:[],src:f.src,d:f.d,closed:f.closed};SU.last.sig=suSig();SU.last.pl=past.length;markDirty();clashDirty=true;render();renderInspector();updateHint();vcbSync()}
+
+/* ---- Scale (S): plan sizes scale about the selection's centre; heights stay ---- */
+function suScaleStart(list,w){const kit=list.concat(carried(list)),b=unionBox(list);if(!b)return;const c=[(b.x0+b.x1)/2,(b.y0+b.y1)/2];checkpoint();SU.sc={c,r0:Math.max(1/V.k*8,Math.hypot(w[0]-c[0],w[1]-c[1])),f:1,orig:kit.map(o=>[o.id,clone(o)]),w:b.x1-b.x0};SU.typed='';updateHint()}
+function suScaleApply(f){const z=SU.sc;if(!z)return;z.f=f;const c=z.c,S_=p=>[Math.round(c[0]+(p[0]-c[0])*f),Math.round(c[1]+(p[1]-c[1])*f)];
+  z.orig.forEach(([id,o0])=>{const o=byId(id);if(!o)return;Object.keys(o).forEach(k=>{if(!(k in o0))delete o[k]});Object.assign(o,clone(o0));
+    if(o.t==='item'||o.t==='text'){const q=S_([o.x,o.y]);o.x=q[0];o.y=q[1];if(o.t==='item'){o.w=Math.max(10,Math.round(o.w*f));o.d=Math.max(10,Math.round(o.d*f))}}
+    else if(o.pts)o.pts=o.pts.map(S_);else if(o.t==='dim'){o.a=S_(o.a);o.b=S_(o.b)}});clashDirty=true;render()}
+function suScaleCommit(){const z=SU.sc;if(!z)return;SU.sc=null;if(z.f===1){suPopPast();render();updateHint();return}SU.last={kind:'sc',f:z.f,st:z,ids:z.orig.map(x=>x[0]),copies:[]};SU.last.sig=suSig();SU.last.pl=past.length;markDirty();clashDirty=true;render();renderInspector();updateHint();vcbSync()}
+function suScaleCancel(){const z=SU.sc;if(!z)return;suScaleApply(1);SU.sc=null;suPopPast();render();updateHint()}
+/* ---- Tape measure (T): a guide line parallel to an edge, a set distance away; guides snap and are saved with the plan ---- */
+function suGuideAt(base,d){const[a,b]=base,dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy)||1,nx=-dy/L,ny=dx/L;return{a:[Math.round(a[0]+nx*d),Math.round(a[1]+ny*d)],b:[Math.round(b[0]+nx*d),Math.round(b[1]+ny*d)]}}
+function suTapeStart(w){const tol=10/V.k;let best=null;suSegs(null).concat((S.guides||[]).map(g=>[g.a,g.b])).forEach(sg=>{const[a,c]=sg,dx=c[0]-a[0],dy=c[1]-a[1],L2=dx*dx+dy*dy;if(!L2)return;const t=((w[0]-a[0])*dx+(w[1]-a[1])*dy)/L2,q=[a[0]+dx*t,a[1]+dy*t],d=Math.hypot(q[0]-w[0],q[1]-w[1]);if(d<tol&&(!best||d<best.d))best={d,sg}});
+  if(!best){toast('Click on an edge to pull a guide from it');return}SU.tp={base:best.sg,d:0};SU.typed='';updateHint();drawOverlay()}
+function suTapeDist(w){const[a,b]=SU.tp.base,dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy)||1,d=((w[0]-a[0])*-dy+(w[1]-a[1])*dx)/L;const st=P.snap?(+P.snapSize||10):10;return Math.round(d/st)*st}
+function suTapeCommit(){const t=SU.tp;if(!t)return;SU.tp=null;if(!t.d){toast('Pull away from the edge, or type a distance');render();updateHint();return}checkpoint();S.guides=(S.guides||[]).concat([suGuideAt(t.base,t.d)]);SU.last={kind:'tp',base:t.base,d:t.d,ids:[],copies:[]};SU.last.sig=suSig();SU.last.pl=past.length;markDirty();render();updateHint();vcbSync()}
+function suGuidesClear(){if(!S.guides||!S.guides.length)return toast('No guides to delete');checkpoint();delete S.guides;markDirty();render();toast('Guides deleted')}
+/* ---- 3D: standard views, parallel projection, X-ray ---- */
+function suView(k){if(!is3D){set3D(true);setTimeout(()=>suView(k),400);return}if(!T3)return;const{camera,controls}=T3;const[cx,cz]=T3.center,sp=T3.span,cy=T3.cy||0,d=sp*(SU.par?40:1.4);controls.target.set(cx,cy,cz);
+  const P_={top:[cx,cy+d,cz+0.0001],front:[cx,cy+sp*0.15,cz+d],back:[cx,cy+sp*0.15,cz-d],right:[cx+d,cy+sp*0.15,cz],left:[cx-d,cy+sp*0.15,cz],iso:[cx+d*0.62,cy+d*0.62,cz+d*0.62]}[k];if(!P_)return;camera.position.set(P_[0],P_[1],P_[2]);
+  camera.near=Math.max(0.01,sp/2000)*(SU.par?20:1);camera.far=Math.max(sp*30,d*4);camera.updateProjectionMatrix();controls.update();T3.need=true;toast({top:'Top',front:'Front',back:'Back',right:'Right',left:'Left',iso:'Iso'}[k]+' view')}
+function suParallel(on){if(!T3){if(on!==undefined)SU.par=on;return}const{camera,controls}=T3;if(T3.fov0==null)T3.fov0=camera.fov;on=on===undefined?!SU.par:on;if(on===!!SU.par)return;
+  const t=controls.target,dir=camera.position.clone().sub(t),d=dir.length(),h=2*d*Math.tan(camera.fov*Math.PI/360),f2=on?2:T3.fov0,d2=h/(2*Math.tan(f2*Math.PI/360));
+  SU.par=on;camera.fov=f2;camera.position.copy(t.clone().add(dir.normalize().multiplyScalar(d2)));camera.near=Math.max(0.01,d2/400);camera.far=Math.max(T3.span*30,d2*4);camera.updateProjectionMatrix();controls.update();T3.need=true;toast(on?'Parallel projection (camera far away with a narrow lens)':'Perspective')}
+const suXmats=new Map();
+function suXrayApply(on){if(!T3)return;if(!on){suXmats.forEach((v,m)=>{m.transparent=v[0];m.opacity=v[1];m.depthWrite=v[2];m.needsUpdate=true});suXmats.clear();T3.need=true;return}
+  T3.group.traverse(o=>{if(!o.isMesh)return;(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{if(!m||suXmats.has(m))return;suXmats.set(m,[m.transparent,m.opacity,m.depthWrite]);m.transparent=true;m.opacity=Math.min(m.opacity,0.45);m.depthWrite=false;m.needsUpdate=true})});T3.need=true}
+function suXray(on){SU.xray=on===undefined?!SU.xray:on;if(is3D)suXrayApply(SU.xray);toast(SU.xray?'X-ray on':'X-ray off')}
+
+
+/* ---- Scenes: saved views as tabs across the top of the plan, saved with the plan ---- */
+function suSceneGrab(){const sc={v:{x:V.x,y:V.y,k:V.k},d3:!!is3D};if(is3D&&T3){const c=T3.camera,t=T3.controls.target;sc.cam={p:[c.position.x,c.position.y,c.position.z],t:[t.x,t.y,t.z],fov:c.fov};sc.par=!!SU.par}if(SU.xray)sc.xray=true;if(SU.hidden.size)sc.hidden=[...SU.hidden];return sc}
+function suSceneAdd(){checkpoint();S.scenes=(S.scenes||[]).concat([Object.assign({name:'Scene '+((S.scenes||[]).length+1)},suSceneGrab())]);markDirty();suScenesBar();toast('Scene added · click its tab to come back to this view')}
+function suSceneGo(i){const sc=(S.scenes||[])[i];if(!sc)return;SU.hidden=new Set(sc.hidden||[]);const fin=()=>{if(sc.d3&&T3&&sc.cam){const c=T3.camera;if(T3.fov0==null)T3.fov0=c.fov;SU.par=!!sc.par;c.fov=sc.cam.fov||c.fov;c.position.set(...sc.cam.p);T3.controls.target.set(...sc.cam.t);c.updateProjectionMatrix();T3.controls.update();T3.need=true}SU.xray=!!sc.xray;if(is3D){build3D();suXrayApply(SU.xray)}render();suScenesBar(i)};
+  if(sc.d3&&!is3D){set3D(true);let n=0;const wt=()=>{if(T3&&is3D)fin();else if(n++<40)setTimeout(wt,100)};setTimeout(wt,100)}else{if(!sc.d3&&is3D)set3D(false);if(!sc.d3){V.x=sc.v.x;V.y=sc.v.y;V.k=sc.v.k;applyView()}fin()}}
+function suSceneUpdate(i){const sc=(S.scenes||[])[i];if(!sc)return;checkpoint();Object.assign(sc,suSceneGrab());if(!SU.hidden.size)delete sc.hidden;if(!SU.xray)delete sc.xray;markDirty();toast('Scene updated')}
+function suSceneDel(i){if(!(S.scenes||[])[i])return;checkpoint();S.scenes.splice(i,1);if(!S.scenes.length)delete S.scenes;markDirty();suScenesBar()}
+function suSceneRename(i){const sc=(S.scenes||[])[i];if(!sc)return;const n=prompt('Scene name',sc.name);if(n==null||!String(n).trim())return;checkpoint();sc.name=String(n).trim().slice(0,60);markDirty();suScenesBar()}
+let suBar=null,suBarSig='';
+function suScenesBar(on){if(!suBar){suBar=document.createElement('div');suBar.id='su-scenes';suBar.setAttribute('role','tablist');suBar.setAttribute('aria-label','Scenes');$('#main').appendChild(suBar);
+    suBar.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const i=+b.dataset.i;if(b.dataset.a==='add')suSceneAdd();else if(b.dataset.a==='x')suSceneDel(i);else suSceneGo(i)});
+    suBar.addEventListener('dblclick',e=>{const b=e.target.closest('button[data-a=go]');if(b)suSceneRename(+b.dataset.i)});
+    suBar.addEventListener('contextmenu',e=>{const b=e.target.closest('button[data-a=go]');if(!b)return;e.preventDefault();suSceneUpdate(+b.dataset.i)})}
+  const L=S.scenes||[];suBar.hidden=!suOn()||!L.length||WALK.on||bldView;if(suBar.hidden)return;
+  suBar.innerHTML=L.map((sc,i)=>`<span class="sc${on===i?' on':''}"><button type="button" data-a="go" data-i="${i}" role="tab" title="Go to this scene · double-click to rename · right-click to update it to the current view">${esc(sc.name)}</button><button type="button" class="x" data-a="x" data-i="${i}" aria-label="Delete scene ${esc(sc.name)}">×</button></span>`).join('')+'<button type="button" class="add" data-a="add" aria-label="Add scene" title="Add a scene from the current view">+</button>'}
+/* ---- editing inside a group: double-click a group to work on its parts; the rest fades; Esc or a click outside leaves ---- */
+function suGroupEnter(gid){SU.gctx=gid;{const mem=S.objs.filter(o=>o.gid===gid),d=mem.find(o=>o.cmp)&&mem.find(o=>o.cmp).cmp;SU.cedit=d&&S.comps&&S.comps[d]?{gid,d,T:suInstT(mem.filter(o=>o.cmp===d),S.comps[d]),sig:JSON.stringify(mem)}:null}sel=new Set();render();renderInspector();updateHint();toast('Editing inside the group · Esc or a click outside leaves')}
+function suGroupLeave(){if(!SU.gctx)return;const ce=SU.cedit;SU.cedit=null;const g=SU.gctx;SU.gctx=null;if(ce&&JSON.stringify(S.objs.filter(o=>o.gid===g))!==ce.sig){checkpoint();const n=suCompPropagate(g,ce.d,ce.T);markDirty();clashDirty=true;if(n)toast(`Component updated: ${n} other ${n===1?'copy':'copies'} changed`)}render();updateHint()}
+function suFade(){const g=SU&&SU.gctx;$$('#L-rooms [data-id],#L-items [data-id],#L-anno [data-id]').forEach(el=>{const o=g?byId(el.dataset.id):null;el.classList.toggle('su-fade',!!g&&!!o&&o.gid!==g)})}
+
+svg.addEventListener('pointerdown',ev=>{if(!SU.gctx||ev.button!==0)return;const el=ev.target.closest&&ev.target.closest('[data-id]');const o=el?byId(el.dataset.id):null;if(!o||o.gid!==SU.gctx)suGroupLeave()},true);
+
+/* ---- Circle (C), Polygon and Rotated rectangle: they draw rooms, so the checks see them ---- */
+function suCirPts(c,r,n,a0){const out=[];for(let i=0;i<n;i++){const a=a0+i*2*Math.PI/n;out.push([Math.round(c[0]+Math.cos(a)*r),Math.round(c[1]+Math.sin(a)*r)])}return out}
+function suRoomAdd(pts,name){if(!pts||pts.length<3||Math.abs(polyArea(pts))<2e5){toast('Too small to make a room');render();return}checkpoint();const o={id:uid(),t:'room',name,pts,gid:null};S.objs.push(o);sel=new Set([o.id]);markDirty();clashDirty=true;render();renderInspector();SU.last={kind:'shape',ids:[o.id],copies:[],shape:SU.lastShape};SU.last.sig=suSig();SU.last.pl=past.length;updateHint();vcbSync()}
+function suCirFinish(){const c=SU.cir;if(!c)return;SU.cir=null;if(!c.r){render();updateHint();return}SU.lastShape={k:c.k,c:c.c,r:c.r,n:c.n,a0:c.a0};suRoomAdd(suCirPts(c.c,c.r,c.n,c.a0),c.k==='circle'?'Round room':`${c.n}-sided room`)}
+function suRRPts(a,b,d){const dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy)||1,nx=-dy/L*d,ny=dx/L*d;return[a,b,[Math.round(b[0]+nx),Math.round(b[1]+ny)],[Math.round(a[0]+nx),Math.round(a[1]+ny)]]}
+
+/* ---- Move and Rotate inside 3D. Move slides on the floor; the up arrow locks the blue (height) axis and lifts items off the floor ---- */
+let suB3raf=0;function suB3(){if(!suB3raf)suB3raf=requestAnimationFrame(()=>{suB3raf=0;build3D()})}
+function su3pick(e){if(!T3)return null;const cv=$('#v3c'),{THREE,camera,group}=T3,r=cv.getBoundingClientRect(),rc=new THREE.Raycaster();rc.setFromCamera(new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1),camera);
+  for(const h of rc.intersectObjects(group.children,true)){let m=h.object;while(m&&!m.userData.id)m=m.parent;if(!m)continue;const o=byId(m.userData.id);if(!o||fixed(o))continue;return{o,p:h.point,wall:m.userData.paint==='wall'}}return null}
+function su3ppm(p){const cv=$('#v3c'),r=cv.getBoundingClientRect(),a=p.clone().project(T3.camera),b=p.clone();b.y+=1;b.project(T3.camera);return Math.max(0.005,Math.abs(a.y-b.y)*r.height/2/1000)}
+(()=>{const cv=$('#v3c'),host=$('#v3');if(!cv||!host)return;/* on the 3D view's container, in the capture phase, so these tools act before anything listening on the canvas */
+  host.addEventListener('pointerdown',e=>{if(e.target!==cv)return;if(!is3D||WALK.on||e.button!==0||(tool!=='su-move'&&tool!=='su-rotate'))return;e.stopImmediatePropagation();e.preventDefault();SU.d3down=[e.clientX,e.clientY];
+    if(tool==='su-move'){if(SU.mv){suMoveCommit();SU.d3down=null;return}const h=su3pick(e);let l=selList().filter(o=>!fixed(o));if(!l.length&&h){l=groupOf(h.o).filter(o=>!fixed(o));sel=new Set(l.map(o=>o.id))}if(!l.length){toast('Press on what to move');return}
+      const fp=floorAt(e)||[h?h.p.x*1000:0,h?h.p.z*1000:0];if(T3.controls)T3.controls.enabled=false;suMoveStart(l,[Math.round(fp[0]),Math.round(fp[1])]);SU.mv.y0=e.clientY;SU.mv.ppm=h?su3ppm(h.p):1;SU.mv.z0=l.map(o=>[o.id,+o.z||0]);try{cv.setPointerCapture(e.pointerId)}catch(_){};return}
+    if(tool==='su-rotate'){if(SU.rt&&SU.rt.stage===2){suRotCommit();SU.d3down=null;if(T3.controls)T3.controls.enabled=true;return}const h=su3pick(e);let l=selList().filter(o=>!fixed(o));if(!l.length&&h){l=groupOf(h.o).filter(o=>!fixed(o));sel=new Set(l.map(o=>o.id))}if(!l.length){toast('Press on what to rotate');return}
+      const b=unionBox(l),c=[(b.x0+b.x1)/2,(b.y0+b.y1)/2],fp=floorAt(e)||[c[0]+1000,c[1]];if(T3.controls)T3.controls.enabled=false;suRotStart(l,c);suRotRef([fp[0]+(Math.hypot(fp[0]-c[0],fp[1]-c[1])<100?1000:0),fp[1]]);try{cv.setPointerCapture(e.pointerId)}catch(_){}}},true);
+  host.addEventListener('pointermove',e=>{if(!is3D||(tool!=='su-move'&&tool!=='su-rotate'))return;
+    if(SU.mv){e.stopImmediatePropagation();const m=SU.mv;if(m.akey==='z'){let dz=(m.y0-e.clientY)/m.ppm;dz=Math.round(dz/(e.altKey?10:50))*(e.altKey?10:50);m.dz=dz;m.z0.forEach(([id,z])=>{const o=byId(id);if(o&&o.t==='item')o.z=Math.max(0,z+dz)||undefined});m.d=[0,0];suB3();vcbSync();return}
+      const fp=floorAt(e);if(!fp)return;m.raw=[fp[0]-m.base[0],fp[1]-m.base[1]];suMoveTo(m.raw,e.shiftKey);vcbSync();return}
+    if(SU.rt&&SU.rt.stage===2){e.stopImmediatePropagation();const fp=floorAt(e);if(fp)suRotApply(suRotAngle(fp,e.altKey));vcbSync()}},true);
+  host.addEventListener('pointerup',e=>{if(!is3D||!SU.d3down)return;const far=Math.hypot(e.clientX-SU.d3down[0],e.clientY-SU.d3down[1])>8;SU.d3down=null;if(!far)return;e.stopImmediatePropagation();if(SU.mv)suMoveCommit();else if(SU.rt&&SU.rt.stage===2)suRotCommit();if(T3&&T3.controls)T3.controls.enabled=true},true);
+})();
+/* ---- Arc (A): two clicks for the ends, a third for how far it bows; makes a curved wall ---- */
+function suArcWall(a,b,h){const w={id:uid(),t:'wall',pts:[a,b],th:typeof newWallTh==='function'?newWallTh():100,closed:false,gid:null};if(h)w.bulge=[h];return w}
+function suArcSign(a,b,cur,h){/* bow towards the pointer whatever the sign convention of the wall drawing */const w=suArcWall(a,b,h);try{const q=wallPathPts(w),m=q[Math.floor(q.length/2)],side=p=>Math.sign((b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]));return side(m)===side(cur)?h:-h}catch(e){return h}}
+/* ---- colour by tag: plan objects tinted by their library group ---- */
+function suTagColours(on){SU.tagcol=on===undefined?!SU.tagcol:on;let st=$('#su-tagcol');if(!st){st=document.createElement('style');st.id='su-tagcol';document.head.appendChild(st)}
+  if(!SU.tagcol){st.textContent='';toast('Colour by tag off');return}const cats=[...new Set(S.objs.filter(o=>o.t==='item'&&o.cat).map(o=>o.cat))];const cls=c=>'cat-'+String(c).toLowerCase().replace(/[^a-z0-9]+/g,'-');
+  st.textContent=cats.map((c,i)=>`#L-items .${cls(c)} :is(rect,path,circle,ellipse,polygon){fill:hsl(${Math.round(i*137.5)%360},62%,72%)!important}`).join('');toast(`Colour by tag: ${cats.length} ${cats.length===1?'group':'groups'}`)}
+
+/* ---- Components: copies that share one definition. Edit inside any copy (double-click it); when you leave, every other copy takes the change ---- */
+function suPose(o){if(o.t==='item'||o.t==='text')return{p:[o.x,o.y],a:+o.r||0};if(o.pts&&o.pts.length>1)return{p:o.pts[0],a:Math.atan2(o.pts[1][1]-o.pts[0][1],o.pts[1][0]-o.pts[0][0])*180/Math.PI};if(o.pts)return{p:o.pts[0],a:0};if(o.t==='dim')return{p:o.a,a:Math.atan2(o.b[1]-o.a[1],o.b[0]-o.a[0])*180/Math.PI};return{p:[0,0],a:0}}
+function suXf(o,T,inv){if(inv){moveObj(o,clone(o),-T.t[0],-T.t[1]);turnObj(o,0,0,-T.r)}else{turnObj(o,0,0,T.r);moveObj(o,clone(o),T.t[0],T.t[1])}const R=v=>Math.round(v*1000)/1000;if(o.x!=null){o.x=R(o.x);o.y=R(o.y)}if(o.r!=null)o.r=R(((o.r%360)+360)%360);if(o.pts)o.pts=o.pts.map(p=>[R(p[0]),R(p[1])]);if(o.a&&o.b){o.a=[R(o.a[0]),R(o.a[1])];o.b=[R(o.b[0]),R(o.b[1])]}return o}
+function suInstT(members,def){const keys=members.map(m=>m.cmk).filter(k=>k!=null).sort((a,b)=>a-b);for(const k of keys){const m=members.find(x=>x.cmk===k),d=def.objs.find(x=>x.cmk===k);if(!m||!d)continue;const pm=suPose(m),pd=suPose(d),r=pm.a-pd.a,q=rotPt(pd.p[0],pd.p[1],0,0,r);return{r,t:[pm.p[0]-q[0],pm.p[1]-q[1]]}}return{r:0,t:[0,0]}}
+function suInstances(d){const by={};S.objs.forEach(o=>{if(o.cmp===d&&o.gid){(by[o.gid]=by[o.gid]||[]).push(o)}});return by}
+function suCompMake(){let l=selList().filter(o=>!fixed(o));if(!l.length)return toast('Select what to make into a component');l=l.concat(carried(l));const ids=new Set(l.map(o=>o.id));l=S.objs.filter(o=>ids.has(o.id));
+  if(l.some(o=>o.cmp))return toast('Part of that is already a component. Explode it first, or Make unique');
+  const n=Object.keys(S.comps||{}).length+1,name=prompt('Component name','Component '+n);if(name==null)return;checkpoint();const d=uid(),g=uid();S.comps=S.comps||{};
+  l.forEach((o,i)=>{o.gid=g;o.cmp=d;o.cmk=i});S.comps[d]={name:String(name).trim().slice(0,60)||'Component '+n,objs:l.map(o=>{const c=clone(o);delete c.id;delete c.gid;return c})};
+  markDirty();render();renderInspector();toast(`Component made: ${S.comps[d].name} · copy it to place more; edit any copy and the others follow`)}
+function suCompUnique(){const l=selList().filter(o=>o.cmp);if(!l.length)return;const d0=l[0].cmp,def=S.comps&&S.comps[d0];if(!def)return;checkpoint();const d=uid();const g=l[0].gid;const mem=S.objs.filter(o=>o.gid===g&&o.cmp===d0);
+  mem.forEach(o=>{o.cmp=d});S.comps[d]={name:def.name+' (unique)',objs:mem.map(o=>{const c=clone(o);delete c.id;delete c.gid;c.cmp=d;return suXf(c,suInstT(mem,def),true)})};markDirty();render();toast('This copy is now its own component')}
+function suCompExplode(){const l=selList().filter(o=>o.cmp);if(!l.length)return;checkpoint();const g=l[0].gid;S.objs.forEach(o=>{if(o.gid===g){delete o.cmp;delete o.cmk}});markDirty();render();renderInspector();toast('Exploded: now a plain group')}
+function suCompPropagate(gid,d,T0,why){const def=S.comps&&S.comps[d];if(!def)return 0;const mem=S.objs.filter(o=>o.gid===gid);let k=Math.max(-1,...def.objs.map(c=>+c.cmk||0))+1;mem.forEach(o=>{if(o.cmp!==d){o.cmp=d;o.cmk=k++}});
+  const nd=mem.map(o=>{const c=clone(o);delete c.id;delete c.gid;return suXf(c,T0,true)});const inst=suInstances(d);let n=0;
+  Object.keys(inst).forEach(g2=>{if(g2===gid)return;const m2=inst[g2],T2=suInstT(m2,def),gone=new Set(m2.map(o=>o.id));S.objs=S.objs.filter(o=>!gone.has(o.id));nd.forEach(c=>{const o=clone(c);o.id=uid();o.gid=g2;suXf(o,T2,false);S.objs.push(o)});n++});
+  def.objs=nd;return n}
+function suCompPurge(){const used=new Set(S.objs.map(o=>o.cmp).filter(Boolean));const dead=Object.keys(S.comps||{}).filter(d=>!used.has(d));if(!dead.length)return toast('Nothing to purge');checkpoint();dead.forEach(d=>delete S.comps[d]);if(!Object.keys(S.comps).length)delete S.comps;markDirty();toast(`Purged ${dead.length} unused ${dead.length===1?'component':'components'}`);suOutlinerUI()}
+/* ---- Outliner: components, groups and rooms in one list; click to select, double-click a component to rename ---- */
+function suOutlinerOpen(){let m=$('#su-outliner');if(!m){m=document.createElement('div');m.id='su-outliner';m.className='keys-modal';m.hidden=true;m.setAttribute('data-keep','');m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');m.setAttribute('aria-labelledby','su-ol-h');document.body.appendChild(m);
+    m.addEventListener('click',e=>{const b=e.target.closest('[data-ol]');if(!b)return;const a=b.dataset.ol,v=b.dataset.v;if(a==='x'){m.hidden=true;return}if(a==='purge')return suCompPurge();
+      if(a==='comp'){const ids=S.objs.filter(o=>o.cmp===v).map(o=>o.id);setSel(ids);suZoomSel()}else if(a==='grp'){setSel(S.objs.filter(o=>o.gid===v).map(o=>o.id));suZoomSel()}else if(a==='room'){setSel([v]);suZoomSel()}});
+    m.addEventListener('dblclick',e=>{const b=e.target.closest('[data-ol=comp]');if(!b)return;const def=S.comps[b.dataset.v];const n=prompt('Component name',def.name);if(n==null||!n.trim())return;checkpoint();def.name=n.trim().slice(0,60);markDirty();suOutlinerUI()});
+    m.addEventListener('input',e=>{if(e.target.id==='su-ol-f')suOutlinerUI(true)})}
+  m.innerHTML='<div class="keys-card" style="height:auto;max-width:440px"><div class="keys-head"><h3 id="su-ol-h">Outliner</h3><span style="flex:1"></span><button class="btn sm" type="button" data-ol="purge" title="Delete component definitions that have no copies left">Purge unused</button><button class="btn icon ghost sm" type="button" data-ol="x" aria-label="Close">✕</button></div><div style="padding:10px 14px"><input id="su-ol-f" type="search" placeholder="Filter" aria-label="Filter the outliner" style="width:100%;margin-bottom:8px"><div id="su-ol-list" style="max-height:55vh;overflow:auto;font-size:13px"></div></div></div>';m.hidden=false;suOutlinerUI()}
+function suOutlinerUI(keep){const box=$('#su-ol-list');if(!box)return;const f=(($('#su-ol-f')||{}).value||'').toLowerCase(),ok=t=>!f||String(t).toLowerCase().includes(f);let h='';
+  const comps=Object.entries(S.comps||{}).filter(([d,c])=>ok(c.name));if(comps.length)h+='<div class="grp">Components</div>'+comps.map(([d,c])=>{const n=Object.keys(suInstances(d)).length;return`<button type="button" class="ol-row" data-ol="comp" data-v="${d}" title="Select every copy · double-click to rename">◈ ${esc(c.name)} <span class="muted">${n} ${n===1?'copy':'copies'}</span></button>`}).join('');
+  const gs={};S.objs.forEach(o=>{if(o.gid&&!o.cmp)(gs[o.gid]=gs[o.gid]||[]).push(o)});const gl=Object.entries(gs).filter(([g,l])=>ok('group '+l.map(o=>o.name||'').join(' ')));if(gl.length)h+='<div class="grp">Groups</div>'+gl.map(([g,l])=>`<button type="button" class="ol-row" data-ol="grp" data-v="${g}">▣ Group of ${l.length} <span class="muted">${esc(l.slice(0,3).map(o=>o.name||o.t).join(', '))}</span></button>`).join('');
+  const rs=S.objs.filter(o=>o.t==='room'&&ok(o.name||'Room'));if(rs.length)h+='<div class="grp">Rooms</div>'+rs.map(o=>`<button type="button" class="ol-row" data-ol="room" data-v="${o.id}">▢ ${esc(o.name||'Room')} <span class="muted">${(Math.abs(polyArea(o.pts))/2e6).toFixed(1)} m²</span></button>`).join('');
+  box.innerHTML=h||'<p class="muted">Nothing here yet.</p>'}
+
+/* ---- 3D styles: hidden line (white faces, black edges) and sketchy edges; section fill on cut walls ---- */
+const suStyleMats=new Map();
+function suStyleApply(){if(!T3||!is3D)return;const{THREE,group}=T3;group.children.filter(c=>c.userData.suEdge).forEach(c=>{group.remove(c);c.geometry&&c.geometry.dispose()});suStyleMats.forEach((v,m)=>{m.color&&m.color.copy(v);m.needsUpdate=true});suStyleMats.clear();
+  const st=SU.style||'shaded';if(st==='shaded')return;const meshes=[];group.traverse(o=>{if(o.isMesh&&!o.userData.noExport&&!o.userData.suCap&&o.visible)meshes.push(o)});const cap=6000;if(meshes.length>cap)toast(`Edges drawn on the first ${cap} of ${meshes.length} parts`);
+  const lm=new THREE.LineBasicMaterial({color:0x222222});const sk=st==='sketchy';let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647-0.5};
+  meshes.slice(0,cap).forEach(o=>{(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{if(m&&m.color&&!suStyleMats.has(m)){suStyleMats.set(m,m.color.clone());if(st==='hidden')m.color.set(0xffffff);m.needsUpdate=true}});
+    if(o.userData.suCap)return;let eg;try{eg=new THREE.EdgesGeometry(o.geometry,25)}catch(e){return}if(sk){const p=eg.attributes.position,a=p.array,j=0.012;for(let i=0;i<a.length;i+=6){const dx=a[i+3]-a[i],dy=a[i+4]-a[i+1],dz=a[i+5]-a[i+2],ext=0.06;a[i]-=dx*ext;a[i+1]-=dy*ext;a[i+2]-=dz*ext;a[i+3]+=dx*ext;a[i+4]+=dy*ext;a[i+5]+=dz*ext;for(let k=0;k<6;k++)a[i+k]+=rnd()*j}p.needsUpdate=true}
+    const L=new THREE.LineSegments(eg,lm);o.updateWorldMatrix(true,false);L.applyMatrix4(o.matrixWorld);const inv=new THREE.Matrix4().copy(group.matrixWorld).invert();L.applyMatrix4(inv);L.userData.suEdge=true;L.userData.noExport=true;L.raycast=()=>{};group.add(L)});T3.need=true}
+function suStyle(k){SU.style=k;if(is3D){build3D()}toast({shaded:'Shaded',hidden:'Hidden line',sketchy:'Sketchy edges'}[k])}
+function suSecFill(){if(T3&&T3.group)T3.group.children.filter(c=>c.userData.suCap).forEach(c=>{T3.group.remove(c);c.geometry&&c.geometry.dispose()});if(!T3||!is3D||!S.section||!S.section.on||WALK.on||bldView||SU.secfill===false)return;const{THREE,group}=T3,s=0.001,sec=S.section,a=sec.a,b=sec.b;let nx=b[1]-a[1],ny=-(b[0]-a[0]);const L=Math.hypot(nx,ny)||1;nx/=L;ny/=L;if(sec.flip){nx=-nx;ny=-ny}
+  const wh=S.bld?lvVal(S.bld,bldLevel(S),'ceiling'):2800,dx=b[0]-a[0],dy=b[1]-a[1],mat=new THREE.MeshBasicMaterial({color:0x2b2b2b,side:THREE.DoubleSide});let n=0;
+  (T3.cols||[]).forEach(c=>{if(!c||!Array.isArray(c.a)||!Array.isArray(c.b)||!(c.t>0))return;const X=suCross([a,b],[c.a,c.b]);if(!X)return;const ux=c.b[0]-c.a[0],uy=c.b[1]-c.a[1],ul=Math.hypot(ux,uy)||1,sin=Math.abs((ux*dy-uy*dx)/(ul*(Math.hypot(dx,dy)||1)));if(sin<0.05)return;const w=c.t/sin;
+    const g=new THREE.PlaneGeometry(w*s,wh*s),m=new THREE.Mesh(g,mat);m.position.set((X[0]+nx*2)*s,wh/2*s,(X[1]+ny*2)*s);m.rotation.y=-Math.atan2(dy,dx);m.userData.noExport=true;m.userData.suCap=true;m.raycast=()=>{};group.add(m);n++});T3.need=true;return n}
+function suAfter3D(){suXmats.clear();if(SU.xray)suXrayApply(true);suSecFill();suStyleApply()}
+/* ---- Materials: named colours for the paint bucket ---- */
+const SU_MATS=[['Brick','#a0522d'],['Concrete','#b8b8b0'],['Fair-face concrete','#cfcfc8'],['Plaster white','#f4f2ec'],['Timber, light','#d9b98c'],['Timber, dark','#7a5230'],['Carpet, grey','#8c8f94'],['Carpet, blue','#49648c'],['Vinyl, beige','#d8cdb4'],['Tile, white','#eeeeea'],['Marble','#e8e4dc'],['Granite','#6e6a66'],['Glass','#9ec9de'],['Steel','#8a9299'],['Aluminium','#c4c8cc'],['Grass','#6b9a43'],['Water','#5b9bc4'],['Asphalt','#4a4a4a'],['Paint, sage','#a9b8a0'],['Paint, terracotta','#c96f4a']];
+function suMatsOpen(){let m=$('#su-mats');if(!m){m=document.createElement('div');m.id='su-mats';m.className='keys-modal';m.hidden=true;m.setAttribute('data-keep','');m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');m.setAttribute('aria-labelledby','su-mats-h');document.body.appendChild(m);
+    m.addEventListener('click',e=>{const b=e.target.closest('[data-m]');if(!b)return;if(b.dataset.m==='x'){m.hidden=true;return}P.paintCol=b.dataset.m;savePrefs();m.hidden=true;setTool('paint');toast(`${b.title}: click a wall, floor or item to paint it`)})}
+  m.innerHTML=`<div class="keys-card" style="height:auto;max-width:460px"><div class="keys-head"><h3 id="su-mats-h">Materials</h3><span style="flex:1"></span><button class="btn icon ghost sm" type="button" data-m="x" aria-label="Close">✕</button></div><div style="padding:12px 14px"><p class="muted" style="margin:0 0 8px">Pick one to paint with. Colours only: no textures yet.</p><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px">${SU_MATS.map(([n,c])=>`<button type="button" class="mat" data-m="${c}" title="${esc(n)}" style="border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:6px;cursor:pointer;font:inherit;font-size:12px;color:var(--fg);text-align:left"><span style="display:block;height:34px;border-radius:5px;background:${c};margin-bottom:4px"></span>${esc(n)}</button>`).join('')}</div></div></div>`;m.hidden=false}
+
+/* ---- Push/Pull (SketchUp's extrude). StoreyBook objects keep their type, so pulling sets a value:
+   an item's height; a wall or floor's floor-to-ceiling height (the building's walls share it per floor) ---- */
+function suPPTarget(o,wallHit){if(!o)return null;
+  if(o.t==='item'&&!isSite(o))return{key:'h:'+o.id,label:'Height',get:()=>+o.h||0,set:v=>{o.h=Math.round(Math.max(10,Math.min(30000,v)))},ids:[o.id]};
+  if((o.t==='room'||o.t==='wall'||wallHit)&&S.bld){const l=bldLevel(S);return{key:'c:'+l.id,label:'Floor to ceiling',get:()=>lvVal(S.bld,l,'ceiling'),set:v=>{l.ceiling=Math.round(Math.max(1000,Math.min(30000,v)))},ids:[]}}
+  if(o.t==='room'||o.t==='wall'||wallHit){toast('Walls take their height from the floor. Set up the building in Details › Floors to pull it');return null}
+  return null}
+function suPPStart(t,ev,ppm){SU.pp={t,v0:t.get(),y0:ev?ev.clientY:0,ppm:ppm||0,moved:false,cp:false,armed:false};SU.typed='';updateHint();vcbSync()}
+let suPPraf=0;
+function suPPSet(v){const p=SU.pp;if(!p)return;if(!p.cp){checkpoint();p.cp=true}p.t.set(v);markDirty();clashDirty=true;if(is3D){if(!suPPraf)suPPraf=requestAnimationFrame(()=>{suPPraf=0;build3D()})}else render();vcbSync();updateHint()}
+function suPPCommit(){const p=SU.pp;if(!p)return;SU.pp=null;if(!p.cp||p.t.get()===p.v0){if(p.cp)suPopPast();suPPAfter();return}SU.last={kind:'pp',t:p.t,ids:p.t.ids,copies:[],v:p.t.get()};SU.last.sig=suSig();SU.last.pl=past.length;suPPAfter();suChipFor()}
+function suPPCancel(){const p=SU.pp;if(!p)return;SU.pp=null;if(p.cp){p.t.set(p.v0);suPopPast()}suPPAfter()}
+function suPPAfter(){if(T3&&T3.controls)T3.controls.enabled=true;markDirty();renderInspector();updateHint();vcbSync();if(is3D)build3D();else render()}
+/* a small value box for touch screens and for anyone who would rather type into a box */
+let suChip=null;
+function suChipFor(){const L=SU.last;if(!L||L.kind!=='pp')return;if(!suChip){suChip=document.createElement('div');suChip.id='su-chip';suChip.innerHTML='<label><span></span> <input type="text" inputmode="decimal" autocomplete="off"></label> mm<button class="btn sm primary" type="button">Set</button><button class="btn sm ghost icon" type="button" data-x aria-label="Close">✕</button>';$('#main').appendChild(suChip);
+    const inp=suChip.querySelector('input'),go=()=>{SU.typed=String(inp.value).replace(/[^0-9.\-]/g,'');if(!SU.typed)return;if(!suLastOK()){suChip.hidden=true;return}suApplyTyped();suChipFor()};
+    suChip.querySelector('.primary').addEventListener('click',go);suChip.querySelector('[data-x]').addEventListener('click',()=>{suChip.hidden=true});inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();go()}else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();suChip.hidden=true}})}
+  suChip.querySelector('span').textContent=L.t.label;const inp=suChip.querySelector('input');inp.value=L.t.get();suChip.hidden=false;if(!PHONE())setTimeout(()=>{inp.focus();inp.select()},0)}
+/* 3D: press on an item, wall or floor and pull; or click, move, click */
+(()=>{const cv=$('#v3c'),host=$('#v3');if(!cv||!host)return;
+  const pick=e=>{if(!T3)return null;const{THREE,camera,group}=T3;const r=cv.getBoundingClientRect();const rc=new THREE.Raycaster();rc.setFromCamera(new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1),camera);
+    for(const h of rc.intersectObjects(group.children,true)){let m=h.object;while(m&&!m.userData.id)m=m.parent;if(!m)continue;const o=byId(m.userData.id);if(!o||fixed(o))continue;return{o,wall:m.userData.paint==='wall',p:h.point}}return null};
+  const ppm=(p)=>{const{camera}=T3,r=cv.getBoundingClientRect();const a=p.clone().project(camera),b=p.clone();b.y+=1;b.project(camera);return Math.max(0.005,Math.abs(a.y-b.y)*r.height/2/1000)};
+  host.addEventListener('pointerdown',e=>{if(e.target!==cv)return;if(tool!=='su-push'||!is3D||WALK.on||e.button!==0)return;e.stopImmediatePropagation();e.preventDefault();
+    if(SU.pp){suPPCommit();return}const h=pick(e);if(!h){toast('Press on an item, a wall or a floor');return}const t=suPPTarget(h.o,h.wall);if(!t)return;if(suChip)suChip.hidden=true;
+    if(T3.controls)T3.controls.enabled=false;suPPStart(t,e,ppm(h.p));SU.pp.down=[e.clientX,e.clientY];try{cv.setPointerCapture(e.pointerId)}catch(_){}},true);
+  host.addEventListener('pointermove',e=>{const p=SU.pp;if(!p||!is3D||tool!=='su-push')return;e.stopImmediatePropagation();let v=p.v0+(p.y0-e.clientY)/p.ppm;const st=e.altKey?10:50;v=Math.round(v/st)*st;if(Math.abs(e.clientY-p.y0)>3)p.moved=true;if(v!==p.t.get())suPPSet(v)},true);
+  host.addEventListener('pointerup',e=>{const p=SU.pp;if(!p||tool!=='su-push')return;e.stopImmediatePropagation();if(p.down&&Math.hypot(e.clientX-p.down[0],e.clientY-p.down[1])>6){suPPCommit()}else{p.armed=true;p.down=null;updateHint()}},true);
+})();
+/* 2D: click what to set, then type the height */
+svg.addEventListener('pointerdown',ev=>{if(tool!=='su-push'||ev.button!==0)return;ev.stopImmediatePropagation();ev.preventDefault();const el=ev.target.closest&&ev.target.closest('[data-id]');const o=el?byId(el.dataset.id):null;const t=suPPTarget(o,false);if(!t){if(!o)toast('Click an item, a room or a wall');return}
+  sel=new Set([o.id]);SU.last={kind:'pp',t,ids:t.ids,copies:[],v:t.get()};SU.last.sig=suSig();SU.last.pl=-1;render();renderInspector();updateHint();vcbSync();suChipFor()},true);
+/* Settings › Keys and tools: switch between StoreyBook's keys and SketchUp's */
+(()=>{const pop=$('#pop-set');if(!pop)return;const h=pop.querySelector('h3');const box=document.createElement('div');
+  box.innerHTML='<div class="grp">Keys and tools</div><div class="set"><span>Key bindings</span><select id="s-keys" aria-label="Key bindings"><option value="su">SketchUp</option><option value="sb">StoreyBook</option></select></div><div class="set"><span>SketchUp keys and tools</span><button class="btn sm" type="button" id="s-keys-sheet">Show…</button></div>';
+  h.after(...box.childNodes);const sl=$('#s-keys');const sync=()=>{sl.value=suOn()?'su':'sb'};sync();
+  sl.addEventListener('change',()=>{P.suKeys=sl.value==='su';P.suWelcome=1;savePrefs();suCancelAll();suTips();updateHint();vcbSync();toast(P.suKeys?'SketchUp keys and tools: L walls, R rectangle, M move, Q rotate, E eraser, Space select':'StoreyBook keys: W walls, D room, M measure, R turns 90°, V select')});
+  $('#s-keys-sheet').addEventListener('click',()=>suSheetOpen(false));
+  new MutationObserver(()=>{if(!pop.hidden)sync()}).observe(pop,{attributes:true,attributeFilter:['hidden']})})();
+/*@su-end*/
 document.addEventListener('paste',e=>{
   const tag=(e.target.tagName||'').toLowerCase();if(tag==='input'||tag==='textarea'||e.target.isContentEditable)return;
   const items=[...((e.clipboardData&&e.clipboardData.items)||[])];const im=items.find(i=>i.kind==='file'&&/^image\//.test(i.type));
@@ -3346,7 +3832,7 @@ document.addEventListener('paste',e=>{
   if(im){if(S.underlay&&S.underlay.src){toast('To replace the floor plan with the copied image, use Underlay › Paste image');return}const f=im.getAsFile();if(f){const named=new File([f],'Pasted floor plan.'+(f.type.split('/')[1]||'png').replace('jpeg','jpg'),{type:f.type});loadUnderFile(named);return}}
   pasteClip(true);
 });
-document.addEventListener('keyup',e=>{const wk=walkKey(e);if(wk)WALK.keys.delete(wk);if(e.key==='Shift'||!e.shiftKey)WALK.keys.delete('shift');if(e.key===' '){spaceDown=false;svg.style.cursor=tool==='pan'?'grab':(tool==='select'?'default':'crosshair')}});
+document.addEventListener('keyup',e=>{const wk=walkKey(e);if(wk)WALK.keys.delete(wk);if(e.key==='Shift'||!e.shiftKey)WALK.keys.delete('shift');if(e.key===' '){if(SU&&suOn()&&!SU.spaceUsed&&!WALK.on&&!['input','textarea','select'].includes((e.target.tagName||'').toLowerCase()))setTool('select');spaceDown=false;svg.style.cursor=tool==='pan'?'grab':(tool==='select'?'default':'crosshair')}});
 
 /* ================= sample floor ================= */
 /*@dev-only*/function loadSample(){
@@ -3429,6 +3915,7 @@ function init3D(){
   const controls=new THREE.OrbitControls(camera,cv);controls.enableDamping=true;controls.dampingFactor=0.12;controls.maxPolarAngle=Math.PI/2-0.03;controls.screenSpacePanning=true;
   /* same mouse as the 2D plan: left orbits, middle and right pan, wheel zooms */
   controls.mouseButtons={LEFT:THREE.MOUSE.ROTATE,MIDDLE:THREE.MOUSE.PAN,RIGHT:THREE.MOUSE.PAN};
+  /* SketchUp fork: the middle button orbits (Shift with it pans), as in SketchUp */if(suOn())controls.mouseButtons.MIDDLE=THREE.MOUSE.ROTATE;
   const hemi=new THREE.HemisphereLight(0xffffff,0x6f7884,0.8);scene.add(hemi);
   const dir=new THREE.DirectionalLight(0xffffff,0.7);dir.castShadow=true;dir.shadow.mapSize.set(LOW_GPU?1024:2048,LOW_GPU?1024:2048);dir.shadow.bias=-0.0006;scene.add(dir);scene.add(dir.target);
   const group=new THREE.Group();scene.add(group);
@@ -3669,7 +4156,7 @@ function build3D(tg,opts){/* while the browser has taken the graphics away nothi
   if(!sub&&!bldView&&SUN.on&&!WALK.on&&wallH>0){const ups=S.bld?S.objs.filter(o=>isCore(o)&&coreUp(S.bld,o,lvI)):[];const inv=new THREE.MeshBasicMaterial({colorWrite:false,side:THREE.DoubleSide});const cyH=Math.min(ceilH,wallH);
     floorPlate().forEach(poly=>{const sh=new THREE.Shape(poly.map(p=>new THREE.Vector2(p[0]*s,-p[1]*s)));coreHoles(sh,ups,poly);const g=new THREE.ShapeGeometry(sh);g.rotateX(-Math.PI/2);const m=new THREE.Mesh(g,inv);m.position.y=cyH*s;m.castShadow=true;m.receiveShadow=false;m.userData.noExport=true;group.add(m)})}
   S.objs.filter(o=>o.t==='item'&&visible(o)&&(!opts.noFurn||isOpening(o)||isBldObj(o)||isCol(o))&&(!isCeil(o)||showCeil)).forEach(o=>{
-    const g=new THREE.Group();g.userData.id=o.id;g.position.set(o.x*s,0,o.y*s);g.rotation.y=-(o.r||0)*Math.PI/180;
+    const g=new THREE.Group();g.userData.id=o.id;g.position.set(o.x*s,(+o.z||0)*s,o.y*s);g.rotation.y=-(o.r||0)*Math.PI/180;
     const isSel=sel.has(o.id);const col=o.col||cssColor('--c-'+(CATS[o.cat]||'custom'));
     const m=mat(col,isSel?{emissive:accent,emissiveIntensity:0.45}:null),lm=mat(legCol,isSel?{emissive:accent,emissiveIntensity:0.45}:null);
     const H=Math.max(30,o.h||750),w=o.w,d=o.d,hw=w/2,hd=d/2;
@@ -3743,6 +4230,7 @@ function build3D(tg,opts){/* while the browser has taken the graphics away nothi
   T3.center=[cx*s,cy*s];T3.span=span*s;
   if(!T3.framed){frame3D('persp');T3.framed=true}
   try{sectionApply();sectionBar();if(!sub)applySun();sunBar();if(!sub)d3Sync()}catch(e){}
+  /* SketchUp fork: X-ray, styles and section fill are laid over each fresh build */if(!sub&&typeof SU!=='undefined'&&SU)try{suAfter3D()}catch(e){console.warn(e)}
 }
 /* ================= 3D furniture models =================
    Local frame: x across the width, z across the depth with the front (user side, clearance side) at +z, y up. Millimetres. */
@@ -4830,7 +5318,7 @@ function cmdkBuild(){const out=[],seen=new Set();const lab=e=>(e.getAttribute('a
   $$('#pop-more .mi[id],#pop-save .mi[id]').forEach(b=>add(lab(b),'Menu',()=>b.click()));
   $$('#d-insp .tabs [data-tab]').forEach(b=>add('Details: '+lab(b),'Panel',()=>{openInsp();showTab(b.dataset.tab,true)}));
   add('Fit plan to screen','View',()=>{if(is3D)frame3D('persp');else fit()});add('Keyboard shortcuts','Help',()=>{$('#m-keys')&&$('#m-keys').click()});
-  add('Recent messages','Help',()=>toastLog());add('Design axes: turn the whole plan','Command',()=>axesOpen());add('Design axes: pick a wall to square the plan to','Command',()=>axesPickStart());add('Room templates: save mine to a file','Command',()=>tplExport());add('Room templates: open a templates file','Command',()=>tplImport());if(tabs.length>1){add('Plan tab: move left','Command',()=>tabShift(-1));add('Plan tab: move right','Command',()=>tabShift(1))}add('Checks: every check in one place','Command',()=>{openInsp();showTab('fire',true)});add('Security zones: show or hide','Command',()=>setZoneLayer(!zoneOn()));add('Programme: requirements, areas and GFA','Command',()=>progOpen());add('Campus: several buildings on one site','Command',()=>campusOpen());add('Issue revision','Command',()=>{$('#m-snaps')&&$('#m-snaps').click()});
+  add('Recent messages','Help',()=>toastLog());add('Design axes: turn the whole plan','Command',()=>axesOpen());add('SketchUp: keys and tools sheet','Help',()=>suSheetOpen(false));add(suOn()?'SketchUp keys: turn off (StoreyBook keys)':'SketchUp keys: turn on','Command',()=>{P.suKeys=!suOn();P.suWelcome=1;savePrefs();suTips();updateHint();toast(P.suKeys?'SketchUp keys on':'StoreyBook keys')});add('Move (SketchUp)','Tool',()=>setTool('su-move'));add('Style: shaded','View',()=>suStyle('shaded'));add('Style: hidden line','View',()=>suStyle('hidden'));add('Style: sketchy edges','View',()=>suStyle('sketchy'));add('Section fill on / off','View',()=>{SU.secfill=SU.secfill===false;if(is3D)build3D();toast(SU.secfill===false?'Section fill off':'Section fill on')});add('Materials (paint bucket)','Panel',()=>suMatsOpen());add('Outliner (components, groups, rooms)','Panel',()=>suOutlinerOpen());add('Make component','Command',()=>suCompMake());add('Purge unused components','Command',()=>suCompPurge());add('Arc (SketchUp): curved wall','Tool',()=>setTool('su-arc'));add('Colour by tag on / off','View',()=>suTagColours());add('Circle (SketchUp): round room','Tool',()=>setTool('su-circle'));add('Polygon (SketchUp): many-sided room','Tool',()=>setTool('su-polygon'));add('Rotated rectangle (SketchUp)','Tool',()=>setTool('su-rrect'));add('Add scene (saved view)','View',()=>suSceneAdd());(S.scenes||[]).forEach((sc,i)=>add('Scene: '+sc.name,'View',()=>suSceneGo(i)));add('Scale (SketchUp)','Tool',()=>setTool('su-scale'));add('Tape measure guides (SketchUp)','Tool',()=>setTool('su-tape'));add('Delete guides','Command',()=>suGuidesClear());['top','front','back','right','left','iso'].forEach(k=>add('View: '+k[0].toUpperCase()+k.slice(1),'View',()=>suView(k)));add('Parallel projection / perspective','View',()=>suParallel());add('X-ray on / off','View',()=>suXray());add('Offset (SketchUp)','Tool',()=>setTool('su-offset'));add('Push/Pull (SketchUp)','Tool',()=>setTool('su-push'));add('Zoom window','View',()=>setTool('su-zwin'));add('Previous view (F8)','View',()=>suPrevView());add('Zoom selection','View',()=>suZoomSel());add('Flip along red (x)','Command',()=>suFlip('x'));add('Flip along green (y)','Command',()=>suFlip('y'));add('Hide selection','Command',()=>suHide(false));add('Hide everything else','Command',()=>suHide(true));add('Unhide all','Command',()=>suUnhide());add('Entity Info (Details)','Panel',()=>showTab('sel',true));add('Rotate (SketchUp)','Tool',()=>setTool('su-rotate'));add('Eraser (SketchUp)','Tool',()=>setTool('su-erase'));add('Design axes: pick a wall to square the plan to','Command',()=>axesPickStart());add('Room templates: save mine to a file','Command',()=>tplExport());add('Room templates: open a templates file','Command',()=>tplImport());if(tabs.length>1){add('Plan tab: move left','Command',()=>tabShift(-1));add('Plan tab: move right','Command',()=>tabShift(1))}add('Checks: every check in one place','Command',()=>{openInsp();showTab('fire',true)});add('Security zones: show or hide','Command',()=>setZoneLayer(!zoneOn()));add('Programme: requirements, areas and GFA','Command',()=>progOpen());add('Campus: several buildings on one site','Command',()=>campusOpen());add('Issue revision','Command',()=>{$('#m-snaps')&&$('#m-snaps').click()});
   if(is3D)$$('.v3bar button[id]').forEach(b=>{const n=lab(b);if(n)add(n,'3D',()=>b.click())});
   tplAll().forEach(t=>add(t.name+' (room template)','Place · '+t.disc,()=>tplOpen(t.code)));
   LIB.forEach(l=>add(`${l.name}`,'Place · '+libAt(l).join(' › '),()=>{if(is3D&&l.cat==='Ceiling')set3D(false);if(!!P.rcp!==(l.cat==='Ceiling'))setRCP(l.cat==='Ceiling',true);placeLib=l;placeRot=0;placeFlip=false;setTool('place');renderLib()},l.code));
@@ -5296,7 +5784,7 @@ $('#pop-floor').addEventListener('click',e=>{const t=e.target.closest('[data-fl]
 /* ================= My plans: every plan ever edited in this browser, in IndexedDB =================
    Keyed by the plan's pid. Written on every autosave (debounced), listed in the My plans dialog. Independent of the tab autosave in localStorage, which only covers open tabs and is capped at ~5 MB. */
 const PLANS=(()=>{
-  let dbp=null;const open=()=>dbp||(dbp=new Promise((res,rej)=>{try{const q=indexedDB.open('storeybook',1);q.onupgradeneeded=()=>{const db=q.result;if(!db.objectStoreNames.contains('plans'))db.createObjectStore('plans',{keyPath:'pid'})};q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)}catch(e){rej(e)}}));
+  let dbp=null;const open=()=>dbp||(dbp=new Promise((res,rej)=>{try{const q=indexedDB.open('storeybook-sku',1);q.onupgradeneeded=()=>{const db=q.result;if(!db.objectStoreNames.contains('plans'))db.createObjectStore('plans',{keyPath:'pid'})};q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)}catch(e){rej(e)}}));
   const tx=async(mode,fn)=>{const db=await open();return new Promise((res,rej)=>{const t=db.transaction('plans',mode),st=t.objectStore('plans');let out;try{out=fn(st)}catch(e){rej(e);return}t.oncomplete=()=>res(out&&typeof IDBRequest!=='undefined'&&out instanceof IDBRequest?out.result:out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})};
   let putT=null,pending=null;
   /* a small picture of the plan: room fills, walls and item footprints, scaled into 160 x 100 */
@@ -5350,7 +5838,7 @@ $('#plans-modal').addEventListener('click',async e=>{
   if(act==='del'){const r=await PLANS.get(pid);if(!r)return;if(pid===S.pid){toast('This plan is open now: switch to another tab or start a new plan first');return}
     /* open in another tab: deleting it closes that tab too, so its autosave cannot bring it back */
     const other=tabs.find(t=>t!==curTab&&t.S&&t.S.pid===pid);if(!confirm(`Delete "${r.name}" from this browser?${other?' It is open in another tab, which will close.':''} Plan files you saved are not touched.`))return;
-    if(other){clearTimeout(other.asT);store.del('osp-tab-'+other.id);tabs.splice(tabs.indexOf(other),1);saveTabIndex();renderTabs()}await PLANS.del(pid);openPlans();return}
+    if(other){clearTimeout(other.asT);store.del('osk-tab-'+other.id);tabs.splice(tabs.indexOf(other),1);saveTabIndex();renderTabs()}await PLANS.del(pid);openPlans();return}
   if(act==='rename'){const r=await PLANS.get(pid);if(!r)return;const n=prompt('Plan name',r.name);if(!n||!n.trim())return;const p=JSON.parse(r.data);p.name=n.trim();const live=tabs.find(t=>(t===curTab?S:t.S).pid===pid);if(live){(live===curTab?S:live.S).name=p.name;if(live===curTab){$('#pname').value=p.name;renderTabs()}}PLANS.put(p);PLANS.flush();setTimeout(openPlans,120);return}
   if(act==='dup'){const r=await PLANS.get(pid);if(!r)return;const p=JSON.parse(r.data);p.pid=uid();p.name=(p.name||'Untitled plan')+' copy';delete p.saved;newTab(migratePlan(p).plan);$('#plans-modal').hidden=true;toast(`Opened "${p.name}"`);return}
 });
@@ -5387,11 +5875,11 @@ function closeTab(t){
   const live=t===curTab?S:t.S,isDirty=t===curTab?dirty:t.dirty;
   if(isDirty&&live.objs.length&&!confirm(`"${live.name}" has changes that are not saved to a file. Close the tab anyway?`))return;
   if(t===curTab)leaveRoof();
-  store.del('osp-tab-'+t.id);const i=tabs.indexOf(t);tabs.splice(i,1);if(AI.wait&&AI.wait.tab===t){const w=AI.wait;AI.wait=null;w.rej(new Error(AI_CLOSED))}
+  store.del('osk-tab-'+t.id);const i=tabs.indexOf(t);tabs.splice(i,1);if(AI.wait&&AI.wait.tab===t){const w=AI.wait;AI.wait=null;w.rej(new Error(AI_CLOSED))}
   if(!tabs.length){const n={id:uid(),S:blankPlan(),sel:new Set(),past:[],future:[],dirty:false,V:null};tabs.push(n);applyTab(n);autosave();return}
   if(t===curTab)applyTab(tabs[Math.min(i,tabs.length-1)]);else{renderTabs();saveTabIndex()}
 }
-function saveTabIndex(){store.set('osp-tabs',JSON.stringify({ids:tabs.map(t=>t.id),active:curTab&&curTab.id}))}
+function saveTabIndex(){store.set('osk-tabs',JSON.stringify({ids:tabs.map(t=>t.id),active:curTab&&curTab.id}))}
 let tabDragging=false;
 function renderTabs(){const el=$('#ptabs');if(!el)return;if(curTab){if(curTab._nm!=null&&curTab._nm!==S.name)campusRenamed(curTab._nm,S.name);curTab._nm=S.name}/* a tab being dragged must not be rebuilt under the pointer (autosave redraws the tabs) */if(tabDragging)return;el.classList.toggle('single',tabs.length<2);
   el.innerHTML=tabs.map(t=>{const on=t===curTab,nm=on?S.name:t.S.name,dt=on?dirty:t.dirty;
@@ -5418,12 +5906,12 @@ $('#ptabs').addEventListener('auxclick',e=>{if(e.button!==1)return;const t=e.tar
 resize();
 let bootNotes=[];
 { /* restore every tab from the last session; fall back to the single autosave of older versions, then the sample */
-  let idx=null;try{idx=JSON.parse(store.get('osp-tabs')||'null')}catch(e){}
+  let idx=null;try{idx=JSON.parse(store.get('osk-tabs')||'null')}catch(e){}
   const load=raw=>{try{const m=migratePlan(raw);m.notes.forEach(n=>{if(!bootNotes.includes(n))bootNotes.push(n)});return Object.assign(blankPlan(),m.plan)}catch(e){return null}};
-  if(idx&&Array.isArray(idx.ids))idx.ids.forEach(id=>{let raw=null;try{raw=JSON.parse(store.get('osp-tab-'+id)||'null')}catch(e){}const pl=raw&&Array.isArray(raw.objs)&&load(raw);if(pl)tabs.push({id,S:pl,sel:new Set(),past:[],future:[],dirty:true,V:null})});
-  if(!tabs.length){let saved=null;try{saved=JSON.parse(store.get('osp-plan')||'null')}catch(e){}const pl=saved&&Array.isArray(saved.objs)&&load(saved);if(pl)tabs.push({id:uid(),S:pl,sel:new Set(),past:[],future:[],dirty:true,V:null})}
+  if(idx&&Array.isArray(idx.ids))idx.ids.forEach(id=>{let raw=null;try{raw=JSON.parse(store.get('osk-tab-'+id)||'null')}catch(e){}const pl=raw&&Array.isArray(raw.objs)&&load(raw);if(pl)tabs.push({id,S:pl,sel:new Set(),past:[],future:[],dirty:true,V:null})});
+  if(!tabs.length){let saved=null;try{saved=JSON.parse(store.get('osk-plan')||'null')}catch(e){}const pl=saved&&Array.isArray(saved.objs)&&load(saved);if(pl)tabs.push({id:uid(),S:pl,sel:new Set(),past:[],future:[],dirty:true,V:null})}
   let fresh=false;if(!tabs.length){S=blankPlan();tabs.push({id:uid(),S,sel:new Set(),past:[],future:[],dirty:false,V:null});fresh=true}
-  tabs.forEach(t=>{if(!store.get('osp-tab-'+t.id))saveTabData(t,t.S)});
+  tabs.forEach(t=>{if(!store.get('osk-tab-'+t.id))saveTabData(t,t.S)});
   applyTab(tabs.find(t=>idx&&t.id===idx.active)||tabs[0]);
   window.addEventListener('pagehide',()=>{if(curTab&&!store.off){clearTimeout(asT);saveTabData(curTab,AI.pending?AI.pending.pre.S:S)}});
   $('#status').addEventListener('click',e=>{e.stopPropagation();const p=$('#pop-save'),open=p.hidden;closePops();if(!open)return;renderSavePop();const r=e.currentTarget.getBoundingClientRect();p.style.left=Math.max(8,r.left)+'px';p.style.top=(r.bottom+6)+'px';p.hidden=false});
@@ -5431,7 +5919,7 @@ let bootNotes=[];
   $('#m-wipe').addEventListener('click',()=>{closePops();wipeLocal()});
 }
 setTool('select');setStatus();renderInspector();
-document.title=`StoreyBook ${APP_VERSION}${APP_TEST?' · '+APP_TEST:''}`;
+document.title=`StoreyBook ${APP_VERSION}${APP_FORK?' ('+APP_FORK+')':''}${APP_TEST?' · '+APP_TEST:''}`;
 /* on the website, a newer build shows a reload banner; the single file skips this */
 if(/^https?:$/.test(location.protocol)){const chk=()=>fetch('version.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&j.v&&j.v!==APP_VERSION){const b=$('#upd');if(b){b.hidden=false;b.querySelector('b').textContent=j.v}}}).catch(()=>{});
   setTimeout(chk,2500);document.addEventListener('visibilitychange',()=>{if(!document.hidden)chk()});$('#upd-go')&&$('#upd-go').addEventListener('click',()=>location.reload());$('#upd-x')&&$('#upd-x').addEventListener('click',()=>{$('#upd').hidden=true})}
@@ -5454,6 +5942,6 @@ if(window.visualViewport){const vv=window.visualViewport;const keep=()=>{const a
   $$('.set .sw input').forEach(i=>{if(!i.getAttribute('aria-label')){const t=i.closest('.set').querySelector(':scope>span');if(t)i.setAttribute('aria-label',t.textContent.trim())}});
   const dlg='.keys-modal,.pop,#msheet,#snap-modal,#plans-modal,#ctxmenu,#ai-panel';const back=new Map();
   new MutationObserver(ms=>ms.forEach(m=>{const el=m.target;if(!el.matches||!el.matches(dlg))return;if(!el.hidden){if(opener&&!el.contains(opener)){/* opened from inside a menu or sheet: focus goes back to what opened that menu */const d=opener.closest(dlg);back.set(el,d&&d!==el&&back.get(d)||opener)}}else{const o=back.get(el);if(o&&o.isConnected&&o.offsetParent&&(document.activeElement===document.body||el.contains(document.activeElement)))try{o.focus({preventScroll:true})}catch(x){}}})).observe(document.body,{attributes:true,attributeFilter:['hidden'],subtree:true})}
-/*@dev-only*/if(location.hash==='#osp-debug')window.__osp={zoomAt:(f,x,y)=>zoomAt(f,x,y),view:()=>({x:V.x,y:V.y,k:V.k}),turnPlan:(d,q)=>turnPlan(d,q),axesFromPoint:(w,t)=>axesFromPoint(w,t),axesPickStart:()=>axesPickStart(),axesOpen:()=>axesOpen(),renders:()=>T3&&T3.renderer?T3.renderer.info.render.frame:0,walkStart:o=>walkStart(o),set3D:v=>set3D(v),doorCols:()=>doorCols(),tplExport:()=>tplExport(),tplImportText:(t,n)=>tplImportText(t,n),UTPL:()=>UTPL,tabShift:d=>tabShift(d),clashRun:m=>{computeClash(m);return{bad:[...clashCache.bad].sort(),zbad:[...clashCache.zbad].sort()}},importLib:(t,n)=>importLib(t,n),roomKit:l=>roomKit(l),progImportBuf:(b,n)=>progImportBuf(b,n),progCalc:()=>progCalc(progGet()),progOpen:t=>progOpen(t),progExportBlob:()=>progExportBlob(),xlsxRead:b=>xlsxRead(b),progEdit:f=>progEdit(f),progBuild:()=>progBuild(),campusOpen:()=>campusOpen(),campusRows:()=>campusRows(),campusSet:(t,f)=>campusSet(t,f),campusFile:()=>campusFile(),campusTurn:(t,d)=>campusTurn(t,d),libAt:l=>libAt(l),addObjs:(l,sel)=>addObjs(l,!!sel),toastLog:()=>toastLog(),toast:m=>toast(m),toasts:()=>TOASTS.slice(),rotateSel:d=>rotateSel(d),libOpenAll:()=>{libShut.clear();libQ='';libCat='All';renderLib()},libHay:l=>libHay(l),tplPlace:(c,q)=>tplPlace(c,q),tplUpdate:(r,q)=>tplUpdate(r,q),tplOpen:(c,r)=>tplOpen(c,r),tplSave:(r,n,d)=>tplSave(r,n,d),tplAll:()=>tplAll(),dhBuild:q=>dhBuild(q),pvCheck:()=>pvCheck(),enterRoof:()=>enterRoof(),exitRoof:()=>exitRoof(),CAMP:()=>CAMP,openPlanText:(t,h,n)=>openPlanText(t,h,n),campusArrange:()=>campusArrange(),BV:()=>BV,newTab:p=>newTab(p),blankPlan:()=>blankPlan(),progAdvise:()=>progAdvise(),progAdviceApply:j=>progAdviceApply(j),progAdviseAsk:()=>progAdviseAsk(progGet(),progCalc(progGet())),progPlan:()=>progPlan(progGet(),progCalc(progGet())),briefCheck:()=>briefCheck(),S:()=>S,envOf:o=>envOf(o),V,LIB:()=>LIB,APP_VERSION,PLAN_V,openPlanText:(t,n)=>openPlanText(t,null,n||'test'),migratePlan:o=>migratePlan(o),clash:()=>{computeClash();return clashCache},setNorth:v=>setNorth(v,{quiet:true}),PLANS,tabsRaw:()=>tabs,curTab:()=>curTab,isDirty:()=>dirty,markDirty,closeTab:t=>closeTab(t),sunVec:(a,e)=>sunVec(a,e),northSVG,migMap:()=>migMap(),sel:()=>[...sel],planJSON,WALK,walkStep:()=>walkStep(),insertCorner:(o,w)=>insertCorner(o,w),toWorld,floorPlate:()=>floorPlate(),T3:()=>T3,walkInteract:()=>walkInteract(),doorsAnimate:()=>doorsAnimate(),walkTarget:()=>walkTarget(),rideLift:d=>rideLift(d),walkLiftAt:p=>walkLiftAt(p),walkGround:p=>walkGround(p),walkResolve:p=>walkResolve(p),switchFloor:(id,k)=>switchFloor(id,k),exportDXF:()=>exportDXF(),exportIFC:()=>exportIFC(),pins:()=>S.pins,pinSel:()=>pinSel,reorderLevel:(a,t,bl)=>reorderLevel(a,t,bl),d3Active:()=>d3Active(),polyPts:()=>polyPts,migRoom:o=>migRoom(o),aiRun:c=>aiRun(c),aiParse:t=>aiParse(t),aiTraceBuild:(j,i,w)=>aiTraceBuild(j,i,w),aiWidthFrom:q=>aiWidthFrom(q),aiAttach:f=>aiAttach(f),briefCheck:()=>briefCheck(),aiSetBrief:(b,s2)=>aiSetBrief(b,s2),aiDocx:b=>aiDocx(b),cmdkOpen:()=>cmdkOpen(),aiIssues:()=>aiIssues(AI.pending?AI.pending.pre.base:null),aiPastePrompt:q=>aiPastePrompt(q),aiApply:(j,q)=>aiApply(j,q),aiAccept:()=>aiAccept(),aiReject:()=>aiReject(),aiPlanSummary:()=>aiPlanSummary(),aiSystem:()=>aiSystem(),AI:()=>AI,revIssue:d=>revIssue(d),revs:()=>revs(),cloudBoxes:()=>cloudBoxes(),setClouds:v=>setClouds(v),cmpRevNo:()=>cmpRevNo(),plateInner:f=>plateInner(f),costCalc:()=>costCalc(),zoneSummary:()=>zoneSummary(),applyZone:(z,ids)=>applyZone(z,ids),setZoneLayer:v=>setZoneLayer(v),reviewRows:()=>reviewRows(),newPin:(x,y)=>newPin(x,y),egressRun:s=>egressRun(s),egressCompute:()=>egressCompute(),sectionApply:()=>sectionApply(),EG:()=>EG,secSel:()=>secSel,setSecSel:v=>{secSel=v},makeColArray:(o,r,c,gx,gy)=>makeColArray(o,r,c,gx,gy),editArray:(o,ch)=>editArray(o,ch),undo:()=>undo(),redo:()=>redo(),setTool:t=>setTool(t),setSel:ids=>{sel=new Set(ids);renderInspector();render()},SUN:()=>SUN,sunPos:(la,doy,h)=>sunPos(la,doy,h),applySun:()=>applySun(),dayOfYear:(m,d)=>dayOfYear(m,d),snapNext:(tl,last,w)=>{const pt=tool;const pp=polyPts;tool=tl;polyPts=[last];const r=nextPolyPt(w,false);tool=pt;polyPts=pp;return r},tabs:()=>tabs.map(t=>({id:t.id,on:t===curTab,name:t===curTab?S.name:t.S.name,n:(t===curTab?S:t.S).objs.length})),roofMode:()=>roofMode,roofFit:()=>S.bld&&S.bld.roofFit,bldView:()=>bldView,syncFloorOut:()=>syncFloorOut(S),snapTake:n=>snapTake(n),snapCompare:id=>snapCompare(id),snaps:()=>snaps(),cmp:()=>cmp,pointersN:()=>pointers.size,dragM:()=>drag&&drag.m,lastDown:()=>lastDown,checkpoint:()=>checkpoint(),past:()=>past.length,future:()=>future.length,computeClash:m=>computeClash(m),clashCache:()=>clashCache,fidAt,byId:id=>byId(id),build3D:()=>build3D(),renderPOV:o=>renderPOV(o),render:()=>render(),kick3D,runDetect:b=>runDetect(b),loadUnder:f=>loadUnderFile(f),P:()=>P,fit:()=>fit(),toastOff:()=>{const t=$('#toast');if(t)t.hidden=true},detectPlan,traceWalls,findBands,detectColumns,roomsFromWalls,detectDoors,otsu,binarize,skewAngle,rotateBin,lineAngles,angledWalls,thinMask};/*@end-dev-only*/
+/*@dev-only*/if(location.hash==='#osp-debug')window.__osp={SU:()=>SU,isSel:id=>sel.has(id),suKeys:v=>{P.suKeys=v;suTips();updateHint()},suOn:()=>suOn(),suMoveStart:(ids,b)=>suMoveStart(ids.map(byId),b),suMoveApply:d=>suMoveApply(d),suMoveCommit:()=>suMoveCommit(),suCopyToggle:()=>suCopyToggle(),suRotStart:(ids,c)=>suRotStart(ids.map(byId),c),suRotRef:w=>suRotRef(w),suRotApply:d=>suRotApply(d),suRotCommit:()=>suRotCommit(),suType:t=>{SU.typed=t;suApplyTyped()},suStyle:k=>suStyle(k),suSecFill:()=>suSecFill(),suMatsOpen:()=>suMatsOpen(),suCompMake:()=>suCompMake(),suCompUnique:()=>suCompUnique(),suCompPurge:()=>suCompPurge(),suOutlinerOpen:()=>suOutlinerOpen(),suTagColours:o=>suTagColours(o),suSceneAdd:()=>suSceneAdd(),suSceneGo:i=>suSceneGo(i),suGroupEnter:g=>suGroupEnter(g),suGroupLeave:()=>suGroupLeave(),suScaleStart:(ids,w)=>suScaleStart(ids.map(byId),w),suScaleApply:f=>suScaleApply(f),suScaleCommit:()=>suScaleCommit(),suTapeStart:w=>suTapeStart(w),suTapeSet:d=>{SU.tp.d=d},suTapeCommit:()=>suTapeCommit(),suView:k=>suView(k),suParallel:o=>suParallel(o),suXray:o=>suXray(o),suXmatN:()=>suXmats.size,suOffStart:id=>suOffStart(byId(id)),suOffPreview:d=>suOffPreview(d),suOffCommit:()=>suOffCommit(),suInferAt:(x,y,ids)=>{const r=pointSnap([x,y],{ids:ids?new Set(ids):null});return{p:r.p,k:r.k||''}},suPPTarget:(id,w)=>suPPTarget(byId(id),w),suPPStart:(id,w)=>{const t=suPPTarget(byId(id),w);suPPStart(t,null,1)},suPPSet:v=>suPPSet(v),suPPCommit:()=>suPPCommit(),suFlip:a=>suFlip(a),suHide:i=>suHide(i),suUnhide:()=>suUnhide(),suPrevView:()=>suPrevView(),suZoomSel:()=>suZoomSel(),suSelMode:(c,s)=>suSelMode({ctrlKey:c,shiftKey:s}),ctxItems:()=>ctxItems(),suSheetOpen:f=>suSheetOpen(f),rectFinish:(a,b)=>rectFinish(a,b),zoomAt:(f,x,y)=>zoomAt(f,x,y),view:()=>({x:V.x,y:V.y,k:V.k}),turnPlan:(d,q)=>turnPlan(d,q),axesFromPoint:(w,t)=>axesFromPoint(w,t),axesPickStart:()=>axesPickStart(),axesOpen:()=>axesOpen(),renders:()=>T3&&T3.renderer?T3.renderer.info.render.frame:0,walkStart:o=>walkStart(o),set3D:v=>set3D(v),doorCols:()=>doorCols(),tplExport:()=>tplExport(),tplImportText:(t,n)=>tplImportText(t,n),UTPL:()=>UTPL,tabShift:d=>tabShift(d),clashRun:m=>{computeClash(m);return{bad:[...clashCache.bad].sort(),zbad:[...clashCache.zbad].sort()}},importLib:(t,n)=>importLib(t,n),roomKit:l=>roomKit(l),progImportBuf:(b,n)=>progImportBuf(b,n),progCalc:()=>progCalc(progGet()),progOpen:t=>progOpen(t),progExportBlob:()=>progExportBlob(),xlsxRead:b=>xlsxRead(b),progEdit:f=>progEdit(f),progBuild:()=>progBuild(),campusOpen:()=>campusOpen(),campusRows:()=>campusRows(),campusSet:(t,f)=>campusSet(t,f),campusFile:()=>campusFile(),campusTurn:(t,d)=>campusTurn(t,d),libAt:l=>libAt(l),addObjs:(l,sel)=>addObjs(l,!!sel),toastLog:()=>toastLog(),toast:m=>toast(m),toasts:()=>TOASTS.slice(),rotateSel:d=>rotateSel(d),libOpenAll:()=>{libShut.clear();libQ='';libCat='All';renderLib()},libHay:l=>libHay(l),tplPlace:(c,q)=>tplPlace(c,q),tplUpdate:(r,q)=>tplUpdate(r,q),tplOpen:(c,r)=>tplOpen(c,r),tplSave:(r,n,d)=>tplSave(r,n,d),tplAll:()=>tplAll(),dhBuild:q=>dhBuild(q),pvCheck:()=>pvCheck(),enterRoof:()=>enterRoof(),exitRoof:()=>exitRoof(),CAMP:()=>CAMP,openPlanText:(t,h,n)=>openPlanText(t,h,n),campusArrange:()=>campusArrange(),BV:()=>BV,newTab:p=>newTab(p),blankPlan:()=>blankPlan(),progAdvise:()=>progAdvise(),progAdviceApply:j=>progAdviceApply(j),progAdviseAsk:()=>progAdviseAsk(progGet(),progCalc(progGet())),progPlan:()=>progPlan(progGet(),progCalc(progGet())),briefCheck:()=>briefCheck(),S:()=>S,envOf:o=>envOf(o),V,LIB:()=>LIB,APP_VERSION,PLAN_V,openPlanText:(t,n)=>openPlanText(t,null,n||'test'),migratePlan:o=>migratePlan(o),clash:()=>{computeClash();return clashCache},setNorth:v=>setNorth(v,{quiet:true}),PLANS,tabsRaw:()=>tabs,curTab:()=>curTab,isDirty:()=>dirty,markDirty,closeTab:t=>closeTab(t),sunVec:(a,e)=>sunVec(a,e),northSVG,migMap:()=>migMap(),sel:()=>[...sel],planJSON,WALK,walkStep:()=>walkStep(),insertCorner:(o,w)=>insertCorner(o,w),toWorld,floorPlate:()=>floorPlate(),T3:()=>T3,walkInteract:()=>walkInteract(),doorsAnimate:()=>doorsAnimate(),walkTarget:()=>walkTarget(),rideLift:d=>rideLift(d),walkLiftAt:p=>walkLiftAt(p),walkGround:p=>walkGround(p),walkResolve:p=>walkResolve(p),switchFloor:(id,k)=>switchFloor(id,k),exportDXF:()=>exportDXF(),exportIFC:()=>exportIFC(),pins:()=>S.pins,pinSel:()=>pinSel,reorderLevel:(a,t,bl)=>reorderLevel(a,t,bl),d3Active:()=>d3Active(),polyPts:()=>polyPts,migRoom:o=>migRoom(o),aiRun:c=>aiRun(c),aiParse:t=>aiParse(t),aiTraceBuild:(j,i,w)=>aiTraceBuild(j,i,w),aiWidthFrom:q=>aiWidthFrom(q),aiAttach:f=>aiAttach(f),briefCheck:()=>briefCheck(),aiSetBrief:(b,s2)=>aiSetBrief(b,s2),aiDocx:b=>aiDocx(b),cmdkOpen:()=>cmdkOpen(),aiIssues:()=>aiIssues(AI.pending?AI.pending.pre.base:null),aiPastePrompt:q=>aiPastePrompt(q),aiApply:(j,q)=>aiApply(j,q),aiAccept:()=>aiAccept(),aiReject:()=>aiReject(),aiPlanSummary:()=>aiPlanSummary(),aiSystem:()=>aiSystem(),AI:()=>AI,revIssue:d=>revIssue(d),revs:()=>revs(),cloudBoxes:()=>cloudBoxes(),setClouds:v=>setClouds(v),cmpRevNo:()=>cmpRevNo(),plateInner:f=>plateInner(f),costCalc:()=>costCalc(),zoneSummary:()=>zoneSummary(),applyZone:(z,ids)=>applyZone(z,ids),setZoneLayer:v=>setZoneLayer(v),reviewRows:()=>reviewRows(),newPin:(x,y)=>newPin(x,y),egressRun:s=>egressRun(s),egressCompute:()=>egressCompute(),sectionApply:()=>sectionApply(),EG:()=>EG,secSel:()=>secSel,setSecSel:v=>{secSel=v},makeColArray:(o,r,c,gx,gy)=>makeColArray(o,r,c,gx,gy),editArray:(o,ch)=>editArray(o,ch),undo:()=>undo(),redo:()=>redo(),setTool:t=>setTool(t),setSel:ids=>{sel=new Set(ids);renderInspector();render()},SUN:()=>SUN,sunPos:(la,doy,h)=>sunPos(la,doy,h),applySun:()=>applySun(),dayOfYear:(m,d)=>dayOfYear(m,d),snapNext:(tl,last,w)=>{const pt=tool;const pp=polyPts;tool=tl;polyPts=[last];const r=nextPolyPt(w,false);tool=pt;polyPts=pp;return r},tabs:()=>tabs.map(t=>({id:t.id,on:t===curTab,name:t===curTab?S.name:t.S.name,n:(t===curTab?S:t.S).objs.length})),roofMode:()=>roofMode,roofFit:()=>S.bld&&S.bld.roofFit,bldView:()=>bldView,syncFloorOut:()=>syncFloorOut(S),snapTake:n=>snapTake(n),snapCompare:id=>snapCompare(id),snaps:()=>snaps(),cmp:()=>cmp,pointersN:()=>pointers.size,dragM:()=>drag&&drag.m,lastDown:()=>lastDown,checkpoint:()=>checkpoint(),past:()=>past.length,future:()=>future.length,computeClash:m=>computeClash(m),clashCache:()=>clashCache,fidAt,byId:id=>byId(id),build3D:()=>build3D(),renderPOV:o=>renderPOV(o),render:()=>render(),kick3D,runDetect:b=>runDetect(b),loadUnder:f=>loadUnderFile(f),P:()=>P,fit:()=>fit(),toastOff:()=>{const t=$('#toast');if(t)t.hidden=true},detectPlan,traceWalls,findBands,detectColumns,roomsFromWalls,detectDoors,otsu,binarize,skewAngle,rotateBin,lineAngles,angledWalls,thinMask};/*@end-dev-only*/
 })();
 </script>

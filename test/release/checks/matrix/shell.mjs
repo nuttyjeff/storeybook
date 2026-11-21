@@ -502,7 +502,7 @@ const setPre=(pg,pre)=>ev(pg,pre=>{const o=window.__osp,P=o.P();Object.assign(P,
 // mutation (one mutant per setting; each deletes that setting's bindSet(...) call in app.js menus & settings) → FAIL confirmed for:
 //   grid, snap, snapsz, osnap, ortho, dims, clash, wall, theme (theme-dark and theme-light), fill, lbl, inv;
 //   mig: `$('#s-mig').addEventListener('change',` → `('x-change',` → FAIL confirmed; colours: cpick click `applyColor(id,b.dataset.cval||null,false)` removed → FAIL col-wall, col-floor;
-//   persistence: `const savePrefs=()=>store.set('osp-prefs',JSON.stringify(P));` → `const savePrefs=()=>0;` → FAIL grid-, wall-, fill-persist (sample run);
+//   persistence: `const savePrefs=()=>store.set('osk-prefs',JSON.stringify(P));` → `const savePrefs=()=>0;` → FAIL grid-, wall-, fill-persist (sample run);
 //   phone: `bindSet('#s-theme','theme');` removed → FAIL mx-sh-i3-theme-p2.
 async function settingsChecks(b,A,pg){
   if(ONLY&&!SETTINGS.some(x=>ONLY.test(`mx-sh-i3-${x.id}-d2`)||ONLY.test(`mx-sh-i3-${x.id}-persist-d2`)))return;

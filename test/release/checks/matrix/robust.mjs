@@ -365,7 +365,7 @@ async function gInject(b,add){const P=ID+'xs-';const pg=await openPage(b,'deskto
   }finally{add(P+'clean','desktop injection: no console or page errors',pg.errs.length===0,pg.errs.slice(0,4));await closePage(pg)}}
 
 /* ======================= 4. persistence ======================= */
-const lsPlan=pg=>ev(pg,()=>{const o=window.__osp;try{return JSON.parse(localStorage.getItem('osp-tab-'+o.curTab().id)||'null')}catch(e){return null}});
+const lsPlan=pg=>ev(pg,()=>{const o=window.__osp;try{return JSON.parse(localStorage.getItem('osk-tab-'+o.curTab().id)||'null')}catch(e){return null}});
 const idbPlan=(pg,pid)=>ev(pg,async pid=>{const r=await window.__osp.PLANS.get(pid);return r?JSON.parse(r.data):null},pid);
 /* what must survive: objects, name, pins, notes, building */
 /* objects compared by id: the app stores each floor as walls/rooms then fit-out, so the order of plan.objs after a reload is that canonical order */
@@ -389,7 +389,7 @@ async function gPersist(b,add){const P=ID+'ps-';const pg=await openPage(b,'deskt
     /* mutation: app.js:272 markDirty `autosave()` removed → all 10 FAIL confirmed; app.js:277 saveTabData `PLANS.put(plan);` removed → all 10 FAIL (idb) confirmed */
     for(const[k,nm,fn]of EDITS){await T('as-'+k,`desktop: autosave writes within 3 s after: ${nm}`,async()=>{const before=await live();await fn();await sleep(50);const after=await live();
       if(after===before)throw new Error('precondition: the edit changed nothing');
-      const t0=Date.now();const ls=await waitA(pg,want=>{const o=window.__osp;const p=JSON.parse(localStorage.getItem('osp-tab-'+o.curTab().id)||'null');const S=o.S();return !!p&&JSON.stringify(p.objs)===JSON.stringify(S.objs)&&p.name===S.name},null,3000);const lsMs=Date.now()-t0;
+      const t0=Date.now();const ls=await waitA(pg,want=>{const o=window.__osp;const p=JSON.parse(localStorage.getItem('osk-tab-'+o.curTab().id)||'null');const S=o.S();return !!p&&JSON.stringify(p.objs)===JSON.stringify(S.objs)&&p.name===S.name},null,3000);const lsMs=Date.now()-t0;
       const pid=await ev(pg,()=>window.__osp.S().pid);const idb=await waitA(pg,async pid=>{const r=await window.__osp.PLANS.get(pid);if(!r)return false;const p=JSON.parse(r.data),S=window.__osp.S();return JSON.stringify(p.objs)===JSON.stringify(S.objs)&&p.name===S.name},pid,3000);
       add(P+'as-'+k,`desktop: autosave writes this browser's copy (localStorage and My plans) within 3 s after: ${nm}`,ls&&idb,{ls,idb,lsMs,totalMs:Date.now()-t0})})}
     /* mutation: app.js:3962 boot restore `idx.ids.forEach(` → `[].forEach(` → FAIL confirmed */
@@ -418,7 +418,7 @@ async function gPersist(b,add){const P=ID+'ps-';const pg=await openPage(b,'deskt
   /* quota-toast FAILs on the real build (finding: only the status line warns), so it has no mutant to confirm.
      mutation: app.js:285 setStatus 'fail' text → 'Autosave on (this browser)' → quota-status FAIL confirmed; app.js:277 `PLANS.put(plan);` removed → quota-idb FAIL confirmed */
   const qp=await openPage(b,'desktop');
-  try{await ev(qp,()=>{const real=Storage.prototype.setItem;window.__quota=0;Storage.prototype.setItem=function(k,v){if(String(k).startsWith('osp-')){window.__quota++;throw new DOMException('The quota has been exceeded.','QuotaExceededError')}return real.call(this,k,v)}});
+  try{await ev(qp,()=>{const real=Storage.prototype.setItem;window.__quota=0;Storage.prototype.setItem=function(k,v){if(String(k).startsWith('osk-')){window.__quota++;throw new DOMException('The quota has been exceeded.','QuotaExceededError')}return real.call(this,k,v)}});
     await frameSample(qp);await ev(qp,()=>window.__osp.toastOff());const n0=await nObjs(qp);
     await dock(qp,'room');await dragW(qp,[2000,20000],[6000,23000]);await dock(qp,'select');const n1=await nObjs(qp);
     const toast=await waitF(qp,()=>{const t=document.querySelector('#toast');return !t.hidden&&/(storage|full|not (been )?(auto)?saved|save to a file|quota)/i.test(t.textContent)},null,3000);

@@ -474,13 +474,13 @@ async function gLib(b,phone,add){const S=phone?'phone 2D':'desktop 2D',P=phone?'
       const q=v=>/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;const txt=csv.replace(/\s*$/,'')+'\n'+nr.map(q).join(',')+'\n';
       await openLib();await choose(pg,'#lib-imp',{name:'mx-lib.csv',mimeType:'text/csv',buffer:Buffer.from(txt)},'f-lib');await waitF(pg,()=>window.__osp.LIB().some(l=>l.code==='MXTEST'),null,3000);
       await press(pg,'#lib-q');await pg.keyboard.type('MX Test');await sleep(pg,120);await kbDone(pg);const s=await shown();
-      const r=await ev(pg,()=>({n:window.__osp.LIB().length,has:window.__osp.LIB().some(l=>l.code==='MXTEST'&&l.name==='MX Test Box'),stored:/MXTEST/.test(localStorage.getItem('osp-lib')||'')}));await clearQ();
+      const r=await ev(pg,()=>({n:window.__osp.LIB().length,has:window.__osp.LIB().some(l=>l.code==='MXTEST'&&l.name==='MX Test Box'),stored:/MXTEST/.test(localStorage.getItem('osk-lib')||'')}));await clearQ();
       add(P+'lib-import',`${S}: Import CSV loads the file: the new item is in the library, findable, and kept in this browser`,r.has&&r.n===n0+1&&r.stored&&s.length===1&&s[0].code==='MXTEST',{...r,n0,shown:s.length})});
     /* mutation (desktop): app.js:921 lib-reset `LIB=libFromCSV(DEFAULT_LIB_CSV);` → `` → FAIL confirmed */
     await T('lib-reset',`${S}: Reset puts back the built-in library`,async()=>{
       if(!await ev(pg,()=>window.__osp.LIB().some(l=>l.code==='MXTEST'))&&csv){/* setup */const rows=parseCSV(csv).filter(r=>r.length>1);const nr=rows[1].slice();nr[0]='MXTEST';nr[1]='MX Test Box';await pg.setInputFiles('#f-lib',{name:'mx.csv',mimeType:'text/csv',buffer:Buffer.from(csv.replace(/\s*$/,'')+'\n'+nr.map(v=>/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v).join(',')+'\n')});await waitF(pg,()=>window.__osp.LIB().some(l=>l.code==='MXTEST'),null,3000)}
       const pre=await ev(pg,()=>window.__osp.LIB().some(l=>l.code==='MXTEST'));await openLib();await press(pg,'#lib-reset');await sleep(pg,100);
-      const r=await ev(pg,()=>({has:window.__osp.LIB().some(l=>l.code==='MXTEST'),n:window.__osp.LIB().length,stored:localStorage.getItem('osp-lib')}));
+      const r=await ev(pg,()=>({has:window.__osp.LIB().some(l=>l.code==='MXTEST'),n:window.__osp.LIB().length,stored:localStorage.getItem('osk-lib')}));
       add(P+'lib-reset',`${S}: Reset removes the imported item, restores the built-in list and forgets the stored library`,pre&&!r.has&&r.n===n0&&r.stored==null,{pre,...r,n0})});
   }finally{add(P+'lib-clean',`${S}: library page had no console errors`,pg.errs.length===0,pg.errs.slice(0,4));await closeMx(pg)}}
 
@@ -501,9 +501,9 @@ async function gReloadWipe(b,phone,add){const S=phone?'phone 2D':'desktop 2D',P=
        mutation B: app.js:302 wipeLocal `PLANS.clear().finally(` → `Promise.resolve().finally(` → FAIL confirmed */
     await T('wipe',`${S}: Clear data in this browser empties local storage and the plans store`,async()=>{
       await ev(pg,()=>{const o=window.__osp;o.markDirty()});await waitA(pg,async()=>{const o=window.__osp;o.PLANS.flush();return (await o.PLANS.list()).length>0},null,5000);
-      const pre=await ev(pg,async()=>{const o=window.__osp;const ks=Object.keys(localStorage).filter(k=>k.startsWith('osp-'));return {ks,tabIds:o.tabsRaw().map(t=>t.id),pids:(await o.PLANS.list()).map(p=>p.pid)}});
+      const pre=await ev(pg,async()=>{const o=window.__osp;const ks=Object.keys(localStorage).filter(k=>k.startsWith('osk-'));return {ks,tabIds:o.tabsRaw().map(t=>t.id),pids:(await o.PLANS.list()).map(p=>p.pid)}});
       pg.dq.push(true);const nav=pg.waitForEvent('load',{timeout:10000});await menu(pg,'m-wipe');await nav;await boot();
-      const r=await ev(pg,async pre=>{const o=window.__osp;const ks=Object.keys(localStorage).filter(k=>k.startsWith('osp-'));const left=pre.tabIds.filter(id=>localStorage.getItem('osp-tab-'+id)!=null);const idx=localStorage.getItem('osp-tabs')||'';
+      const r=await ev(pg,async pre=>{const o=window.__osp;const ks=Object.keys(localStorage).filter(k=>k.startsWith('osk-'));const left=pre.tabIds.filter(id=>localStorage.getItem('osk-tab-'+id)!=null);const idx=localStorage.getItem('osk-tabs')||'';
         const db=await new Promise(res=>{const q=indexedDB.open('storeybook',1);q.onsuccess=()=>{const d=q.result;if(!d.objectStoreNames.contains('plans')){res([]);return}const g=d.transaction('plans').objectStore('plans').getAllKeys();g.onsuccess=()=>res(g.result);g.onerror=()=>res(['ERR'])};q.onerror=()=>res(['ERR'])});
         return {keys:ks,oldTabKeys:left.length,idxOld:pre.tabIds.filter(id=>idx.includes(id)).length,oldPids:pre.pids.filter(p=>db.includes(p)).length,db:db.length,objs:o.S().objs.length,tabs:o.tabsRaw().length}},pre);
       add(P+'wipe',`${S}: Clear data (confirmed) reloads into a blank plan with no old tabs in local storage and no old plans in the browser store`,pre.tabIds.length>=1&&pre.pids.length>=1&&r.oldTabKeys===0&&r.idxOld===0&&r.oldPids===0&&r.objs===0&&r.tabs===1,{pre:{keys:pre.ks.length,tabs:pre.tabIds.length,pids:pre.pids.length},...r})});

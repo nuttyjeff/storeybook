@@ -136,9 +136,9 @@ add(B,'b5-dup','Ctrl+D duplicates the selection 500 mm down-right and selects th
   const ok=nw.length===1&&n.code==='WS1260'&&n.x===1500&&n.y===1300&&n.w===1200&&n.d===600&&n.id!=='d1'&&sel.length===1&&sel[0]===n.id&&await others(pg,s0,[]);const ur=await UR(pg,s0,s1);
   return {pass:ok&&ur.ok,detail:{nw:nw.map(o=>[o.code,o.x,o.y]),sel,ur}}});
 /* B6 */
-// mutation [copy]: app.js:1408 `clip=clone(l);pasteN=0;store.set('osp-clip',JSON.stringif...` → `clip=null;pasteN=0;` → FAIL confirmed (2D; 3D check fails on the real build, a finding)
+// mutation [copy]: app.js:1408 `clip=clone(l);pasteN=0;store.set('osk-clip',JSON.stringif...` → `clip=null;pasteN=0;` → FAIL confirmed (2D; 3D check fails on the real build, a finding)
 add(B,'b6-copy-paste','Ctrl+C then Ctrl+V pastes a copy under the pointer',async pg=>{
-  await selectOne(pg,'d1');await pg.evaluate(()=>localStorage.removeItem('osp-clip'));await pg.keyboard.press('Control+c');const clip=await ev(pg,()=>(localStorage.getItem('osp-clip')||'').length);const s0=await ST(pg);const t=await onEmpty(pg,9500,4200);await pg.mouse.move(t[0],t[1]);if(pg.d3)await pg.mouse.move(t[0]+1,t[1]);
+  await selectOne(pg,'d1');await pg.evaluate(()=>localStorage.removeItem('osk-clip'));await pg.keyboard.press('Control+c');const clip=await ev(pg,()=>(localStorage.getItem('osk-clip')||'').length);const s0=await ST(pg);const t=await onEmpty(pg,9500,4200);await pg.mouse.move(t[0],t[1]);if(pg.d3)await pg.mouse.move(t[0]+1,t[1]);
   await pg.keyboard.press('Control+v');await wf(pg,n=>window.__osp.S().objs.length===n+1,JSON.parse(s0).o.length);const nw=await newObjs(pg,s0);const s1=await ST(pg);const n=nw[0]||{};
   const pos=pg.d3?(near(n.x,9500,100)&&near(n.y,4200,100)):(n.x===9500&&n.y===4200);const ok=nw.length===1&&n.code==='WS1260'&&n.id!=='d1'&&pos;const ur=await UR(pg,s0,s1);
   return {pass:ok&&ur.ok,detail:{nw:nw.map(o=>[o.code,o.x,o.y]),clip,ur}}});
