@@ -93,8 +93,8 @@ const INV=()=>{const o=window.__osp,S=o.S(),out={};
   const ids=new Set(S.objs.map(x=>x.id));out.sel=o.sel().filter(id=>!ids.has(id)).slice(0,4);
   /* every open dialog / sheet has a way out the user can see and reach */
   const vis=e=>{if(!e||e.hidden)return false;const cs=getComputedStyle(e);if(cs.display==='none'||cs.visibility==='hidden')return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0};
-  /* reachable: on screen and on top, or only covered by a popover menu or the toast, which an outside tap / a moment clears */
-  const reach=e=>{if(!vis(e))return false;const r=e.getBoundingClientRect();const x=r.left+r.width/2,y=r.top+r.height/2;if(x<0||y<0||x>innerWidth||y>innerHeight)return false;const t=document.elementFromPoint(x,y);return !!t&&(t===e||e.contains(t)||!!t.closest('.pop,#toast'))};
+  /* reachable: on screen and on top, or only covered by a popover menu, the toast or the command search, which an outside tap / a moment / Esc clears (Search opened over the AI panel covers its Close until Search is closed) */
+  const reach=e=>{if(!vis(e))return false;const r=e.getBoundingClientRect();const x=r.left+r.width/2,y=r.top+r.height/2;if(x<0||y<0||x>innerWidth||y>innerHeight)return false;const t=document.elementFromPoint(x,y);return !!t&&(t===e||e.contains(t)||!!t.closest('.pop,#toast,#cmdk'))};
   const stuck=[];
   document.querySelectorAll('.keys-modal').forEach(m=>{if(vis(m)&&![...m.querySelectorAll('[aria-label=Close],[data-pclose],[data-kclose],[data-gclose]')].some(reach))stuck.push('#'+m.id)});
   const ms=document.querySelector('#msheet');if(vis(ms)&&![...ms.querySelectorAll('[data-msheet-close]')].some(reach))stuck.push('#msheet');
