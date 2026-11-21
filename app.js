@@ -3903,7 +3903,9 @@ function placeUpPop(p,btn){p.style.overflowY='auto';const m=$('#main').getBoundi
 /* ================= 3D view ================= */
 let is3D=false,T3=null,t3Timer=null;
 /* ask the 3D loop for a frame (render on demand) */
-function kick3D(){if(T3){T3.need=true;T3.last=performance.now()}}
+function kick3D(){if(T3){T3.need=true;T3.sh=true;T3.last=performance.now()}}
+/* the light 3D mode: half sharpness, shadows left as they are. Used for big plans and whenever frames come slowly */
+function lightMode(){if(!T3||T3.slow)return;T3.slow=true;T3.renderer.setPixelRatio(T3.fullDpr*0.5);T3.need=true;if(!T3.slowTold){T3.slowTold=true;toast(T3.slowBig?"Large plan: the 3D view is drawn softer and without fresh shadows to keep it moving":"The 3D view is drawn softer here to keep it moving")}}
 function cssColor(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#888888'}
 function isDark(){const th=document.documentElement.dataset.theme;return th==='dark'||(th!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches)}
 /* the 3D and PDF libraries are separate files on the website and load the first time they are needed; in the single-file build they are already on the page */
@@ -3920,8 +3922,8 @@ function init3D(){
   cv.addEventListener('webglcontextlost',e=>{e.preventDefault();toast('3D has stopped: the browser reset the graphics. It restarts by itself; if it does not, go to 2D and back')});cv.addEventListener('webglcontextrestored',()=>{try{build3D()}catch(e){}toast('3D is back')});
   /* phones and tablets: cap the pixel ratio at 1.5, use the cheaper shadow filter and smaller shadow maps; a 390-px phone at 1.5× is still sharp and renders about half the pixels of 2× */
   const LOW_GPU=TOUCH||(navigator.deviceMemory&&navigator.deviceMemory<=4);
-  const fullDpr=Math.min(LOW_GPU?1.5:2,window.devicePixelRatio||1);
-  renderer.setPixelRatio(fullDpr);renderer.shadowMap.enabled=true;renderer.shadowMap.type=LOW_GPU?THREE.PCFShadowMap:THREE.PCFSoftShadowMap;renderer.outputEncoding=THREE.sRGBEncoding;
+  /* speed comes first in 3D: one screen pixel per point at most, even on a high-density screen (a phone or a Retina display used to draw up to four times the pixels) */const fullDpr=Math.min(1,window.devicePixelRatio||1);
+  renderer.setPixelRatio(fullDpr);renderer.shadowMap.enabled=true;renderer.shadowMap.autoUpdate=false;renderer.shadowMap.type=LOW_GPU?THREE.PCFShadowMap:THREE.PCFSoftShadowMap;renderer.outputEncoding=THREE.sRGBEncoding;
   const scene=new THREE.Scene();
   const camera=new THREE.PerspectiveCamera(45,1,0.05,1000);
   /* picks right after a rebuild can come before the next frame has placed the new meshes: bring matrices up to date before every ray */
@@ -3939,14 +3941,15 @@ function init3D(){
      and once a second as a safety net. A still scene costs almost nothing. */
   T3.loop=()=>{if(!is3D){T3.raf=null;return}const now=performance.now();if(WALK.on)walkStep();else controls.update();const anim=doorsAnimate();
     if(T3.lowDpr&&WALK.on&&T3.walkMoved&&now-T3.walkMoved>500&&!T3.orbiting){T3.lowDpr=false;renderer.setPixelRatio(T3.slow?fullDpr*0.5:fullDpr);T3.walkMoved=0}
-    /* a big plan on slow graphics: the first frame is drawn at half sharpness and timed by how long the browser takes to come back for the next one. Fast graphics go straight to full sharpness (one soft frame, once); slow graphics stay at half, which draws about three times faster */
-    /* the browser asks for the second frame at once and only then waits for the graphics to catch up, so it is the wait before the third that tells */if(T3.probe===2){T3.probe=3;T3.need=true}else if(T3.probe===3){const gap=now-T3.lastRender;T3.probe=0;if(gap>350){T3.slow=true;if(!T3.slowTold){T3.slowTold=true;toast("Large plan: the 3D view is drawn less sharp and without shadows here to keep it moving")}}else{T3.fastOK=true;renderer.setPixelRatio(fullDpr);renderer.shadowMap.autoUpdate=true;T3.need=true}}
+    /* frames that keep coming slowly (under five a second, four in a row) switch the view to the light mode for good: half sharpness and no shadow pass */
+    /* (not under the test hook: the release gate draws on a software renderer, which is always slow, and its pictures must not depend on when the switch happens) */if(!T3.slow&&T3.wasDrawn&&!location.hash.endsWith("-debug")){if(now-T3.lastRender>200){if((T3.slowN=(T3.slowN||0)+1)>=4){T3.slowAuto=true;lightMode()}}else T3.slowN=0}
+    
     /* in Walk mode the scene used to be redrawn every frame, standing still included, which kept the graphics card at full load. Now it is redrawn only while the view is changing (and once a second, as in orbit) */
     const cs=WALK.on?camera.position.x.toFixed(4)+','+camera.position.y.toFixed(4)+','+camera.position.z.toFixed(4)+','+camera.quaternion.x.toFixed(5)+','+camera.quaternion.y.toFixed(5)+','+camera.quaternion.w.toFixed(5):'';const walking=WALK.on&&cs!==T3.camSig;T3.camSig=cs;if(walking)T3.last=now;
     if(T3.orbiting||walking||anim||T3.need)drawNorth();
-    if(walking||T3.need||anim||now-T3.last<700||now-T3.lastRender>1000){if(renderer.getContext().isContextLost()){T3.lastRender=now}else{if(bldView)bldLabelsMove();renderer.render(scene,camera);T3.need=false;T3.lastRender=now;if(T3.probe===1)T3.probe=2}}
+    if(walking||T3.need||anim||now-T3.last<700||now-T3.lastRender>1000){if(renderer.getContext().isContextLost()){T3.lastRender=now}else{if(bldView)bldLabelsMove();/* shadows are drawn again only when something in the scene changed, not when the camera moved: that pass goes over every triangle */if(!T3.slow&&(T3.sh||anim||(T3.need&&!T3.camNeed)||(walking&&WALK.third)))renderer.shadowMap.needsUpdate=true;T3.sh=false;T3.camNeed=false;renderer.render(scene,camera);T3.need=false;T3.lastRender=now;T3.wasDrawn=true}}else T3.wasDrawn=false;
     T3.raf=requestAnimationFrame(T3.loop)};
-  controls.addEventListener('change',()=>{T3.need=true;T3.last=performance.now()});
+  controls.addEventListener('change',()=>{if(!T3.need)T3.camNeed=true;T3.need=true;T3.last=performance.now()});
   /* orbiting at a lower pixel ratio on high-density screens; full quality returns when the hand lifts */
   controls.addEventListener('start',()=>{T3.last=performance.now();T3.orbiting=true;if(fullDpr>1&&!T3.lowDpr){T3.lowDpr=true;renderer.setPixelRatio(1)}});
   controls.addEventListener('end',()=>{T3.last=performance.now();T3.orbiting=false;if(T3.lowDpr){T3.lowDpr=false;renderer.setPixelRatio(fullDpr)}T3.need=true;drawNorth()});
@@ -4241,7 +4244,8 @@ function build3D(tg,opts){/* while the browser has taken the graphics away nothi
   if(LY('ceil'))S.objs.filter(o=>o.t==='trunk'&&o.pts&&o.pts.length>=2).forEach(o=>{const top=ceilH-(o.drop||0),hh=Math.max(20,o.h||100),ww=Math.max(20,o.w||150),y=top-hh/2;const mtl=mat(o.col||(dark?'#8a9097':'#b4b9bd'),sel.has(o.id)?{emissive:accent,emissiveIntensity:0.4}:null);
     for(let i=0;i<o.pts.length-1;i++){const a=o.pts[i],bq=o.pts[i+1],L=Math.hypot(bq[0]-a[0],bq[1]-a[1]);if(L<1)continue;const bx=new THREE.Mesh(new THREE.BoxGeometry((L+ww)*s,hh*s,ww*s),mtl);bx.position.set((a[0]+bq[0])/2*s,y*s,(a[1]+bq[1])/2*s);bx.rotation.y=-Math.atan2(bq[1]-a[1],bq[0]-a[0]);bx.castShadow=true;if(!sub)bx.userData.id=o.id;group.add(bx)}});
   if(sub)return{cx,cy,B};
-  try{batchItems(group,THREE);if(T3.batched){if(!T3.slow&&!T3.fastOK&&!T3.probe&&!WALK.on){T3.probe=1;T3.renderer.setPixelRatio(T3.fullDpr*0.5);/* and without redrawing the shadows, which is a second pass over every triangle */T3.renderer.shadowMap.autoUpdate=false}}else if(T3.slow||T3.probe){T3.slow=false;T3.probe=0;T3.renderer.setPixelRatio(T3.fullDpr);T3.renderer.shadowMap.autoUpdate=true}}catch(e){console.warn(e)}
+  try{batchItems(group,THREE);/* a big plan always uses the light mode; it goes back to normal with a smaller plan unless slow frames asked for it */if(T3.batched){T3.slowBig=true;lightMode()}else if(T3.slowBig){T3.slowBig=false;if(!T3.slowAuto){T3.slow=false;T3.renderer.setPixelRatio(T3.fullDpr)}}}catch(e){console.warn(e)}
+  T3.sh=true;
   if(WALK.on&&WALK.roof&&S.bld)buildRoofWalk(group,{s,mat,dark});
   const R=span*s*0.8;dir.position.set(cx*s+R*0.6,R*1.3,cy*s+R*0.9);dir.target.position.set(cx*s,0,cy*s);const sc=dir.shadow.camera;sc.left=-R;sc.right=R;sc.top=R;sc.bottom=-R;sc.near=0.1;sc.far=R*5;sc.updateProjectionMatrix();
   T3.center=[cx*s,cy*s];T3.span=span*s;
