@@ -753,6 +753,26 @@ async function desktop(b){
     await pg.locator('#ptabs .ptab.on .x').click().catch(()=>{});await pg.waitForTimeout(300);pg.off('dialog',onD);
     add(R,'s-su-12','SketchUp fork test 12: hidden line draws edges and whitens faces, sketchy edges draws edges, shaded removes them; a section line across a room caps the two walls it cuts; picking Brick in Materials opens Paint',
       r.e1>0&&r.white&&r.e2>0&&r.e3===0&&r.c1===2&&/Paint/i.test(r.hint)&&r.shut&&pg.errs.length===errs0,{r,errs:pg.errs.slice(errs0,errs0+3)})}
+   /* SketchUp fork test 13: the tools leave history and the other tabs alone. Esc on a Move gives Redo back; Ctrl+Z during a Move only puts it down; a radius typed before the centre is refused and Esc still leaves Circle; Scale keeps a curved wall's shape; an Offset deeper than the room is refused; the Outliner shows the true area; what is hidden in one tab is not hidden in the next */
+   {const errs0=pg.errs.length;const onD=d=>d.accept().catch(()=>{});pg.on('dialog',onD);
+    await ev(pg,async()=>{const o=window.__osp,w=ms=>new Promise(r=>setTimeout(r,ms));o.newTab(o.blankPlan());await w(250);o.suKeys(true);if(document.activeElement&&document.activeElement!==document.body)document.activeElement.blur();
+      const it=(id,x)=>({id,t:'item',name:id,code:'D',cat:'Custom',shape:'rect',w:1600,d:800,h:750,a:0,seats:0,cf:0,cb:0,x,y:1500,r:0,gid:null});
+      o.addObjs([{id:'hr',t:'room',name:'Hall',pts:[[0,0],[4000,0],[4000,3000],[0,3000]],gid:null},it('h1',2000),{id:'ha',t:'wall',pts:[[6000,0],[10000,0]],th:100,closed:false,gid:null,bulge:[800]}]);o.addObjs([it('h2',3000)]);o.undo();o.fit();o.setSel([]);await w(200);
+      o.setTool('su-move');o.suMoveStart(['h1'],[2000,1500]);o.suMoveApply([500,0])});
+    await pg.keyboard.press('Escape');await pg.waitForTimeout(80);
+    const a1=await ev(pg,()=>{const o=window.__osp;const r={fut:o.future(),x:o.byId('h1').x,past:o.past()};o.setTool('su-move');o.suMoveStart(['h1'],[2000,1500]);o.suMoveApply([500,0]);return r});
+    await pg.keyboard.press('Control+z');await pg.waitForTimeout(80);
+    const a2=await ev(pg,()=>{const o=window.__osp;const r={mv:!!o.SU().mv,fut:o.future(),x:o.byId('h1').x,past:o.past()};o.setTool('su-circle');return r});
+    for(const k of '5000')await pg.keyboard.press(k);await pg.keyboard.press('Enter');await pg.waitForTimeout(60);const n1=await ev(pg,()=>window.__osp.S().objs.length);
+    await pg.keyboard.press('Escape');await pg.waitForTimeout(80);const h1=await ev(pg,()=>document.querySelector('#hint').textContent);
+    const a3=await ev(pg,async()=>{const o=window.__osp,w=ms=>new Promise(r=>setTimeout(r,ms));o.setTool('su-scale');o.suScaleStart(['ha'],[9000,500]);o.suScaleApply(2);o.suScaleCommit();const bulge=o.byId('ha').bulge[0];
+      o.setTool('su-offset');o.suOffStart('hr');o.suOffPreview(-2500);const deep=o.SU().of.pts;o.suOffPreview(-500);const ok=o.SU().of.pts;o.setTool('select');
+      o.suOutlinerOpen();const area=document.querySelector('#su-ol-list [data-ol=room]').textContent;document.querySelector('#su-outliner').hidden=true;
+      o.setSel(['h1']);o.suHide(false);const hid=o.SU().hidden.size;o.newTab(o.blankPlan());await w(250);const hid2=o.SU().hidden.size;return{bulge,deep,ok:ok&&ok.length,area,hid,hid2}});
+    await pg.locator('#ptabs .ptab.on .x').click().catch(()=>{});await pg.waitForTimeout(300);const hid3=await ev(pg,()=>window.__osp.SU().hidden.size);
+    await ev(pg,()=>{window.__osp.suUnhide();window.__osp.suKeys(false)});await pg.locator('#ptabs .ptab.on .x').click().catch(()=>{});await pg.waitForTimeout(300);pg.off('dialog',onD);
+    add(R,'s-su-13','SketchUp fork test 13: Esc on a Move puts the desk back and leaves Redo as it was; Ctrl+Z during a Move puts it down without taking an earlier step; a radius typed before the centre makes nothing and raises no error, and Esc then leaves Circle; Scale x2 doubles a curved wall\'s bow (800 to 1600); an Offset of 2,500 into a 4 × 3 m room is refused and 500 works; the Outliner shows 12.0 m²; one hidden desk is not hidden in a new tab and is hidden again on coming back',
+      a1.fut===1&&a1.x===2000&&!a2.mv&&a2.fut===1&&a2.x===2000&&a2.past===a1.past&&n1===3&&!/^Circle/.test(h1)&&a3.bulge===1600&&a3.deep===null&&a3.ok===4&&/12\.0 m²/.test(a3.area)&&a3.hid===1&&a3.hid2===0&&hid3===1&&pg.errs.length===errs0,{a1,a2,n1,h1:h1.slice(0,40),a3,hid3,errs:pg.errs.slice(errs0,errs0+3)})}
    /* 5.0.0 test 8: an AI preview belongs to its own plan tab; Undo during a preview undoes the AI; pasted answers with chat around them still parse; wild values are refused */
    {const errs0=pg.errs.length;const st=()=>ev(pg,()=>{const o=window.__osp;return{n:o.S().objs.length,name:o.S().name,pend:!!o.AI().pending,bar:!document.querySelector('#ai-bar').hidden,tabs:o.tabsRaw().length}});
     const a0=await st();const pure=await ev(pg,()=>{const o=window.__osp;const P=t=>{try{const j=o.aiParse(t);return j.commands.length+(j.cut?'cut':'')}catch(e){return 'ERR'}};

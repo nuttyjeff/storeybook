@@ -292,8 +292,8 @@ function restoreState(str){
   if(o.show&&S.bld){try{if(o.show.roof){if(!roofMode)enterRoof()}else{if(roofMode){exitRoof();render();renderFloorUI()}if(o.show.floor&&o.show.floor!==S.bld.active&&S.bld.levels.some(l=>l.id===o.show.floor))switchFloor(o.show.floor)}}catch(e){}}
   return{floor:S.bld?S.bld.active:null,roof:!!roofMode};
 }
-function undo(){/* while an AI preview is showing, Undo means undo the AI's changes */if(AI.pending){aiReject();return}if(!past.length)return toast('Nothing to undo');const cur=snapState(),s=past.pop();pastBytes-=s.length;const at=restoreState(s);/* the step just undone was made where Undo has landed; Redo will show that place again, not wherever the later steps were made */future.push(at?cur.slice(0,-1)+',"show":'+JSON.stringify(at)+'}':cur)}
-function redo(){if(AI.pending)return toast('Accept or undo the AI preview first');if(!future.length)return toast('Nothing to redo');pushPast(snapState());const f=future.pop();restoreState(f);if(f.endsWith(',"ai":1}'))toast('The AI changes are back and kept. Undo removes them again')}
+function undo(){if(typeof SU!=='undefined'&&SU&&suBusy()){/* an operation in hand is put down first, so its own history step is never crossed */suCancelAll();render();updateHint();return}/* while an AI preview is showing, Undo means undo the AI's changes */if(AI.pending){aiReject();return}if(!past.length)return toast('Nothing to undo');const cur=snapState(),s=past.pop();pastBytes-=s.length;const at=restoreState(s);/* the step just undone was made where Undo has landed; Redo will show that place again, not wherever the later steps were made */future.push(at?cur.slice(0,-1)+',"show":'+JSON.stringify(at)+'}':cur)}
+function redo(){if(typeof SU!=='undefined'&&SU&&suBusy()){/* an operation in hand is put down first, so its own history step is never crossed */suCancelAll();render();updateHint();return}if(AI.pending)return toast('Accept or undo the AI preview first');if(!future.length)return toast('Nothing to redo');pushPast(snapState());const f=future.pop();restoreState(f);if(f.endsWith(',"ai":1}'))toast('The AI changes are back and kept. Undo removes them again')}
 
 function markDirty(){dirty=true;setStatus();autosave()}
 let asT=null;
@@ -1325,8 +1325,8 @@ function updateHint(){polyBar();escSync();if(rotChip&&!rotChip.hidden&&!rotTyped
   else if(tool==='section')t='<b>Section</b>Drag a line across the plan — the 3D view is sliced along it';
   else if(tool==='pin')t='<b>Pin</b>Click to drop a review comment, then type it in the Notes tab';
   else if(tool==='text')t='<b>Text</b>Click where the label goes';
-  if(!is3D&&P.rcp&&tool==='select'&&!calib&&!underMove)t='<b>Ceiling plan</b>Furniture is faded · click lights, services and cameras · drag a camera\'s dot to aim it · C back to the floor plan';
-  if(is3D&&WALK.on)t='';else if(is3D&&!bldView&&typeof SU!=='undefined'&&SU&&['su-push','su-move','su-rotate'].includes(tool)&&suHint())t=suHint();else if(is3D&&tool==='place'&&placeLib)t=`<b>${esc(placeLib.name)}</b>Click the floor to place · R rotates · Esc to stop`;else if(is3D&&bldView)t='<b>Building</b>Click a floor to open it · drag to orbit · middle or right-drag to pan · PageUp / PageDown change floor · Tab back to 2D';else if(is3D)t='<b>3D view</b>Drag furniture to move it · drag the floor to orbit · middle or right-drag to pan · R rotates · Q adds furniture · Tab back to 2D';
+  if(!is3D&&P.rcp&&tool==='select'&&!calib&&!underMove)t='<b>Ceiling plan</b>Furniture is faded · click lights, services and cameras · drag a camera\'s dot to aim it · '+(typeof SU!=='undefined'&&SU&&suOn()?'search Ceiling to go':'C')+' back to the floor plan';
+  if(is3D&&WALK.on)t='';else if(is3D&&!bldView&&typeof SU!=='undefined'&&SU&&['su-push','su-move','su-rotate'].includes(tool)&&suHint())t=suHint();else if(is3D&&tool==='place'&&placeLib)t=`<b>${esc(placeLib.name)}</b>Click the floor to place · R rotates · Esc to stop`;else if(is3D&&bldView)t='<b>Building</b>Click a floor to open it · drag to orbit · middle or right-drag to pan · PageUp / PageDown change floor · Tab back to 2D';else if(is3D)t=typeof SU!=='undefined'&&SU&&suOn()?'<b>3D view</b>Drag furniture to move it · drag the floor or middle-drag to orbit · right-drag to pan · M move · Q rotate · P push/pull · K library · Tab back to 2D':'<b>3D view</b>Drag furniture to move it · drag the floor to orbit · middle or right-drag to pan · R rotates · Q adds furniture · Tab back to 2D';
   h.innerHTML=t;h.hidden=!t;
 }
 function pointerWorld(ev){const w=toWorld(ev);lastW=w;$('#coords').textContent=`${fmt(w[0])}, ${fmt(w[1])} mm`;return w}
@@ -3386,7 +3386,9 @@ function suHint(){if(!SU)return'';const c=SU.mv?SU.mv.copy:SU.rt?SU.rt.copy:fals
   if(tool==='su-erase')return'<b>Eraser</b>Click, or drag across, what to delete · a room goes alone and its contents stay';return''}
 const SU_TOOLS=['su-arc','su-move','su-rotate','su-erase','su-zwin','su-push','su-offset','su-scale','su-tape','su-circle','su-polygon','su-rrect'];
 function suBusy(){return !!(SU.arc||SU.mv||SU.rt||SU.rect||SU.er||SU.pp||SU.of||SU.sc||SU.tp||SU.cir||SU.rr)}
-function suPopPast(){const s=past.pop();if(s)pastBytes-=s.length}
+/* a step taken when an operation starts; if the operation is cancelled the step goes and Redo comes back as it was */
+function suCP(){SU.fut=future;checkpoint()}
+function suPopPast(){const s=past.pop();if(s)pastBytes-=s.length;if(SU.fut){if(!future.length)future=SU.fut;SU.fut=null}}
 function suTargets(ev){let l=selList().filter(o=>!fixed(o));if(l.length)return l;
   const el=ev&&ev.target&&ev.target.closest&&ev.target.closest('[data-id]');let o=el?byId(el.dataset.id):null;if(!o||fixed(o))return null;
   l=groupOf(o).filter(x=>!fixed(x));sel=new Set(l.map(x=>x.id));renderInspector();return l}
@@ -3397,7 +3399,7 @@ function suAxis(d){if(!d[0]&&!d[1])return'';if(Math.abs(d[1])<0.5)return'x';if(M
 const SU_COL={x:'#d6332e',y:'#2f9a3a','':'var(--accent)'};
 
 /* ---- Move ---- */
-function suMoveStart(list,base){const kit=list.concat(carried(list));checkpoint();
+function suMoveStart(list,base){const kit=list.concat(carried(list));suCP();
   SU.mv={base,ids:list.map(o=>o.id),orig:kit.map(o=>[o.id,clone(o)]),d:[0,0],copy:false,copies:[],lock:null};SU.typed='';rotLast=null;updateHint();drawOverlay()}
 function suMoveApply(d){const m=SU.mv;if(!m)return;m.d=d;
   if(m.copy)m.copies.forEach(([n,o0])=>moveObj(n,o0,d[0],d[1]));else m.orig.forEach(([id,o0])=>{const o=byId(id);if(o)moveObj(o,o0,d[0],d[1])});
@@ -3419,9 +3421,9 @@ function suMoveCancel(){const m=SU.mv;if(!m)return;SU.mv=null;SU.g='';if(m.copy)
 
 /* ---- Rotate (protractor: centre, then a reference direction, then the turn) ---- */
 function suRotStart(list,c){SU.rt={stage:1,c,list,a0:0,deg:0,copy:false,copies:[],orig:null,ids:list.map(o=>o.id)};SU.typed='';rotLast=null;updateHint();drawOverlay()}
-function suRotRef(w){const r=SU.rt;if(!r)return;const kit=r.list.concat(carried(r.list));r.a0=Math.hypot(w[0]-r.c[0],w[1]-r.c[1])*V.k<4?0:Math.atan2(w[1]-r.c[1],w[0]-r.c[0]);checkpoint();r.orig=kit.map(o=>[o.id,clone(o)]);r.stage=2;updateHint();drawOverlay()}
+function suRotRef(w){const r=SU.rt;if(!r)return;const kit=r.list.concat(carried(r.list));r.a0=Math.hypot(w[0]-r.c[0],w[1]-r.c[1])*V.k<4?0:Math.atan2(w[1]-r.c[1],w[0]-r.c[0]);suCP();r.orig=kit.map(o=>[o.id,clone(o)]);r.stage=2;updateHint();drawOverlay()}
 function suRotApply(deg){const r=SU.rt;if(!r||!r.orig)return;r.deg=deg;
-  /* a copy keeps its own id and group: only the shape and place come from the original */const put=(o,o0)=>{const id=o.id,gid=o.gid;Object.keys(o).forEach(k=>{if(!(k in o0))delete o[k]});Object.assign(o,clone(o0));o.id=id;if(gid!==undefined)o.gid=gid;else delete o.gid;if(deg)turnObj(o,r.c[0],r.c[1],deg)};
+  /* a copy keeps its own id and group: only the shape and place come from the original */const put=(o,o0)=>{const id=o.id,gid=o.gid,tp=o.tp,arr=o.arr;Object.keys(o).forEach(k=>{if(!(k in o0))delete o[k]});Object.assign(o,clone(o0));o.id=id;if(gid!==undefined)o.gid=gid;else delete o.gid;/* and its own room link: a copied item belongs to the copied room */if(tp!==undefined)o.tp=tp;else delete o.tp;if(arr!==undefined)o.arr=arr;else delete o.arr;if(deg)turnObj(o,r.c[0],r.c[1],deg)};
   if(r.copy)r.copies.forEach(([n,o0])=>put(n,o0));else r.orig.forEach(([id,o0])=>{const o=byId(id);if(o)put(o,o0)});clashDirty=true;if(is3D)suB3();else render()}
 function suRotAngle(w,alt){const r=SU.rt;let a=(Math.atan2(w[1]-r.c[1],w[0]-r.c[0])-r.a0)*180/Math.PI;a=((a+180)%360+360)%360-180;if(alt)return Math.round(a*10)/10;const s=Math.round(a/15)*15;return Math.abs(a-s)<=4?s:Math.round(a*2)/2}
 function suRotCommit(){const r=SU.rt;if(!r)return;SU.rt=null;if(r.stage<2){render();updateHint();return}
@@ -3439,7 +3441,7 @@ function suLastOK(){if(!SU.last)return false;if((SU.last.kind==='shape'?({circle
 function suRedoLast(o){const L=SU.last;if(!(past.length===L.pl&&!future.length))checkpoint();
   suRemove(L.copies);L.ids.forEach((id,i)=>{const o0=L.src[i],ob=byId(id);if(ob){Object.keys(ob).forEach(k=>{if(!(k in o0))delete ob[k]});Object.assign(ob,clone(o0))}});
   Object.assign(L,o);L.copies=[];
-  const step=(obj,o0,k)=>{if(L.kind==='move')moveObj(obj,o0,L.d[0]*k,L.d[1]*k);else{const id=obj.id,gid=obj.gid;Object.keys(obj).forEach(q=>{if(!(q in o0))delete obj[q]});Object.assign(obj,clone(o0));obj.id=id;if(gid!==undefined)obj.gid=gid;else delete obj.gid;turnObj(obj,L.c[0],L.c[1],L.deg*k)}};
+  const step=(obj,o0,k)=>{if(L.kind==='move')moveObj(obj,o0,L.d[0]*k,L.d[1]*k);else{const id=obj.id,gid=obj.gid,tp=obj.tp,arr=obj.arr;Object.keys(obj).forEach(q=>{if(!(q in o0))delete obj[q]});Object.assign(obj,clone(o0));obj.id=id;if(gid!==undefined)obj.gid=gid;else delete obj.gid;if(tp!==undefined)obj.tp=tp;else delete obj.tp;if(arr!==undefined)obj.arr=arr;else delete obj.arr;turnObj(obj,L.c[0],L.c[1],L.deg*k)}};
   if(!L.copy)L.ids.forEach((id,i)=>{const ob=byId(id);if(ob)step(ob,L.src[i],1)});
   else{const f=L.div?1/L.n:1;for(let k=1;k<=L.n;k++){const cl=suClones(L.src);cl.forEach((n,i)=>{step(n,L.src[i],k*f);S.objs.push(n);L.copies.push(n.id)})}}
   L.sig=suSig();L.pl=past.length;markDirty();clashDirty=true;render();renderInspector();updateHint()}
@@ -3458,7 +3460,7 @@ function suApplyTyped(){const t=SU.typed;SU.typed='';const q=suParse(t);
   if(SU.mv&&SU.mv.akey==='z'){if(q.v==null)return bad('Type a height in mm');const m=SU.mv;m.dz=q.v;m.z0.forEach(([id,z])=>{const o=byId(id);if(o&&o.t==='item')o.z=Math.max(0,z+q.v)||undefined});suMoveCommit();return}
   if(SU.mv){if(q.v==null)return bad('Type a distance in mm');const d=SU.mv.d,L=Math.hypot(d[0],d[1]);if(!L)return bad('Move the pointer the way to go, then type the distance');suMoveApply([d[0]/L*q.v,d[1]/L*q.v]);suMoveCommit();return}
   if(SU.arc&&SU.arc.b){if(q.v==null)return bad('Type how far the arc bows, in mm');const A=SU.arc;SU.arc=null;checkpoint();const w=suArcWall(A.a,A.b,suArcSign(A.a,A.b,SU.cur||A.b,Math.abs(q.v)));S.objs.push(w);sel=new Set([w.id]);markDirty();clashDirty=true;render();renderInspector();updateHint();return}
-  if(SU.cir){if(q.sides){SU.cir.n=q.sides;P['su'+SU.cir.k+'N']=q.sides;savePrefs();drawOverlay();updateHint();vcbSync();return}if(q.v==null||q.v<=0)return bad('Type a radius in mm, or 12s for 12 sides');SU.cir.r=q.v;suCirFinish();return}
+  if(SU.cir){if(q.sides){SU.cir.n=q.sides;P['su'+SU.cir.k+'N']=q.sides;savePrefs();drawOverlay();updateHint();vcbSync();return}if(!SU.cir.c){SU.cir=null;return bad('Click the centre first, then type the radius · 12s sets 12 sides')}if(q.v==null||q.v<=0)return bad('Type a radius in mm, or 12s for 12 sides');SU.cir.r=q.v;suCirFinish();return}
   if(SU.rr&&SU.rr.stage===2){if(q.v==null)return bad('Type the depth in mm');const sg=SU.rr.d<0?-1:1;SU.rr.d=sg*Math.abs(q.v);const r=SU.rr;SU.rr=null;SU.lastShape={k:'rr'};suRoomAdd(suRRPts(r.a,r.b,r.d),'Room');return}
   if(suLastOK()&&SU.last.kind==='shape'){const L=SU.last,sh=L.shape,o=byId(L.ids[0]);if(!o)return bad('Nothing to change');let pts=null;if(sh.k==='circle'||sh.k==='poly'){if(q.sides)sh.n=q.sides;else if(q.v>0)sh.r=q.v;else return bad('Type a radius or 12s');pts=suCirPts(sh.c,sh.r,sh.n,sh.a0)}else return bad('Nothing to change');if(!(past.length===L.pl&&!future.length))checkpoint();o.pts=pts;L.sig=suSig();L.pl=past.length;markDirty();clashDirty=true;render();updateHint();return}
   if(SU.sc){if(q.v==null||q.v<=0)return bad('Type a scale factor, e.g. 1.5 or 0.5');suScaleApply(q.v);suScaleCommit();return}
@@ -3508,13 +3510,13 @@ function suSVG(){/* runs as the plan's overlay is drawn, after the objects: fade
 /* ---- pointer: these tools run ahead of the plan's own pointer handling ---- */
 svg.addEventListener('pointerdown',ev=>{
   const rectTool=(tool==='room'||tool==='shape-rect')&&SU.rect;if((SU_TOOLS.indexOf(tool)<0||tool==='su-push')&&!rectTool)return;
-  if(ev.button!==0||spaceDown||(ev.pointerType==='touch'&&pointers.size>0))return;
+  if(ev.button!==0||spaceDown)return;if(ev.pointerType==='touch'){const now=performance.now();pointers.forEach((p,id)=>{if(id!==ev.pointerId&&now-(p[2]||0)>3000)pointers.delete(id)});if(pointers.size>0){/* a second finger is a view gesture (pinch or pan), never a second click */SU.downAt=null;if(SU.er){SU.er=null;drawOverlay()}return}pointers.set(ev.pointerId,[ev.clientX,ev.clientY,now])}
   ev.stopImmediatePropagation();ev.preventDefault();closePops();const w=pointerWorld(ev);SU.cur=w;SU.downAt=[ev.clientX,ev.clientY];
   if(rectTool){const b=pointSnap(w,{alt:ev.altKey}).p;const a=SU.rect.a;SU.rect=null;rectFinish(a,b);return}
   if(tool==='su-move'){if(SU.mv){suMoveCommit();SU.downAt=null;return}const l=suTargets(ev);if(!l){toast('Click the object to move, or select first');return}suMoveStart(l,pointSnap(w,{alt:ev.altKey,ids:new Set(l.concat(carried(l)).map(o=>o.id))}).p);return}
   if(tool==='su-rotate'){if(!SU.rt){const l=suTargets(ev);if(!l){toast('Select what to rotate first, or click it');return}suRotStart(l,pointSnap(w,{alt:ev.altKey}).p);return}
     if(SU.rt.stage===1){suRotRef(pointSnap(w,{alt:ev.altKey}).p);return}suRotCommit();SU.downAt=null;return}
-  if(tool==='su-erase'){checkpoint();SU.er={ids:[]};suEraseAt(ev);return}
+  if(tool==='su-erase'){SU.er={ids:[]};try{svg.setPointerCapture(ev.pointerId)}catch(e){}suEraseAt(ev);return}
   if(tool==='su-zwin'){if(SU.zw){suZoomWinEnd(w);return}SU.zw={a:w,b:w};return}
   if(tool==='su-arc'){const p=pointSnap(w,{alt:ev.altKey}).p;if(!SU.arc){SU.arc={a:p,b:null,h:0,e:p};updateHint();return}if(!SU.arc.b){if(Math.hypot(p[0]-SU.arc.a[0],p[1]-SU.arc.a[1])<100)return;SU.arc.b=p;updateHint();return}const A=SU.arc;SU.arc=null;checkpoint();const wl=suArcWall(A.a,A.b,A.h);S.objs.push(wl);sel=new Set([wl.id]);markDirty();clashDirty=true;render();renderInspector();updateHint();return}
   if(tool==='su-circle'||tool==='su-polygon'){const p=pointSnap(w,{alt:ev.altKey}).p;if(SU.cir&&SU.cir.c){suCirFinish();SU.downAt=null;return}const k=tool==='su-circle'?'circle':'poly';SU.cir={k,c:p,r:0,n:(SU.cir&&SU.cir.n)||+P['su'+k+'N']||(k==='circle'?24:6),a0:0};SU.typed='';updateHint();return}
@@ -3524,7 +3526,7 @@ svg.addEventListener('pointerdown',ev=>{
   if(tool==='su-offset'){if(SU.of){suOffCommit();return}const el=ev.target.closest&&ev.target.closest('[data-id]');suOffStart(el?byId(el.dataset.id):null);return}
 },true);
 function suEraseAt(ev){const el=document.elementFromPoint(ev.clientX,ev.clientY);const h=el&&el.closest&&el.closest('[data-id]');const o=h?byId(h.dataset.id):null;if(!o||fixed(o)||SU.er.ids.includes(o.id))return;SU.er.ids.push(o.id);drawOverlay()}
-svg.addEventListener('pointermove',ev=>{if(vcbEl&&!vcbEl.hidden&&!suBusy()&&!SU.typed&&!SU.last)requestAnimationFrame(()=>{if(vcbEl&&!suBusy()&&!SU.last&&!SU.typed)vcbEl.querySelector('.v').textContent=($('#coords')||{}).textContent||''});if(!SU_TOOLS.includes(tool)&&!SU.rect)return;const w=toWorld(ev);SU.cur=w;
+svg.addEventListener('pointermove',ev=>{if(vcbEl&&!vcbEl.hidden&&!suBusy()&&!SU.typed&&!SU.last)requestAnimationFrame(()=>{if(vcbEl&&!suBusy()&&!SU.last&&!SU.typed)vcbEl.querySelector('.v').textContent=($('#coords')||{}).textContent||''});if(!SU_TOOLS.includes(tool)&&!SU.rect)return;if(ev.pointerType==='touch'&&pointers.size>1)return;const w=toWorld(ev);SU.cur=w;
   if(SU.er){suEraseAt(ev);return}
   if(SU.zw){SU.zw.b=w;drawOverlay();return}
   if(SU.of){suOffPreview(suOffDist(w));vcbSync();return}
@@ -3537,7 +3539,7 @@ svg.addEventListener('pointermove',ev=>{if(vcbEl&&!vcbEl.hidden&&!suBusy()&&!SU.
   if(SU.rt){if(SU.rt.stage===2)suRotApply(suRotAngle(w,ev.altKey));else drawOverlay();vcbSync();return}
   if(SU.rect){SU.cur=pointSnap(w,{alt:ev.altKey}).p;vcbSync()}
 },true);
-svg.addEventListener('pointerup',ev=>{if(SU.zw&&SU.downAt&&Math.hypot(ev.clientX-SU.downAt[0],ev.clientY-SU.downAt[1])>8){suZoomWinEnd(toWorld(ev));SU.downAt=null;return}if(SU.er){const ids=SU.er.ids;SU.er=null;suPopPast();if(ids.length){sel=new Set(ids);deleteSel(false);toast(ids.length===1?'Erased':`Erased ${ids.length}`)}else render();return}
+svg.addEventListener('pointerup',ev=>{if(SU.zw&&SU.downAt&&Math.hypot(ev.clientX-SU.downAt[0],ev.clientY-SU.downAt[1])>8){suZoomWinEnd(toWorld(ev));SU.downAt=null;return}if(SU.er){const ids=SU.er.ids;SU.er=null;if(ids.length){sel=new Set(ids);deleteSel(false);toast(ids.length===1?'Erased':`Erased ${ids.length}`)}else render();return}
   /* press, drag, release also works: the release puts it down */
   if(SU.downAt&&Math.hypot(ev.clientX-SU.downAt[0],ev.clientY-SU.downAt[1])>8){if(SU.sc)suScaleCommit();else if(SU.tp)suTapeCommit();else if(SU.mv)suMoveCommit();else if(SU.rt&&SU.rt.stage===2)suRotCommit()}SU.downAt=null},true);
 
@@ -3548,14 +3550,14 @@ function suKey(e,k,mod){
   if(e.key==='Escape'&&SU.gctx&&!SU.typed&&!suBusy()){e.preventDefault();suGroupLeave();return true}
   if(SU.mv&&/^Arrow/.test(e.key)){e.preventDefault();const m=SU.mv;if(e.key==='ArrowRight')m.akey=m.akey==='x'?null:'x';else if(e.key==='ArrowLeft')m.akey=m.akey==='y'?null:'y';else if(e.key==='ArrowUp'&&!is3D)toast('Blue axis is height: use Move in 3D');else if(e.key==='ArrowUp'&&is3D){m.akey=m.akey==='z'?null:'z';if(m.akey==='z'){m.d=[0,0];suMoveApply([0,0])}else m.z0.forEach(([id,z])=>{const o=byId(id);if(o){if(z)o.z=z;else delete o.z}});toast(m.akey==='z'?'Blue axis: move up or down to lift':'Blue axis off');updateHint();return true}else toast('Parallel lock comes with the full snap hints');if(m.raw)suMoveTo(m.raw,e.shiftKey);updateHint();return true}
   if(e.key==='F8'&&suOn()){e.preventDefault();suPrevView();return true}
-  if((tool==='su-circle'||tool==='su-polygon')&&!SU.cir&&!suLastOK())SU.cir={k:tool==='su-circle'?'circle':'poly',c:null,r:0,n:+P['su'+(tool==='su-circle'?'circle':'poly')+'N']||(tool==='su-circle'?24:6),a0:0};
+  if((tool==='su-circle'||tool==='su-polygon')&&!SU.cir&&/^[0-9]$/.test(e.key)&&!suLastOK())SU.cir={k:tool==='su-circle'?'circle':'poly',c:null,r:0,n:+P['su'+(tool==='su-circle'?'circle':'poly')+'N']||(tool==='su-circle'?24:6),a0:0};
   const live=suBusy()||suLastOK()||(SU.rect&&(tool==='room'||tool==='shape-rect'));
   if(live&&!SU.er){
     if(/^[0-9.,;]$/.test(e.key)||((e.key==='s'||e.key==='S')&&/^\d+$/.test(SU.typed)&&(tool==='su-circle'||tool==='su-polygon'))||(e.key==='-'&&!SU.typed)||((e.key==='x'||e.key==='X'||e.key==='*'||e.key==='/')&&!SU.typed&&!SU.rect)){SU.typed+=e.key;updateHint();vcbSync();e.preventDefault();return true}
     if(SU.typed&&e.key==='Backspace'){SU.typed=SU.typed.slice(0,-1);updateHint();vcbSync();e.preventDefault();return true}
     if(SU.typed&&e.key==='Enter'){e.preventDefault();suApplyTyped();vcbSync();return true}
     if(e.key==='Escape'&&SU.arc&&!SU.typed){e.preventDefault();SU.arc=null;render();updateHint();return true}
-  if(e.key==='Escape'&&(SU.cir||SU.rr)&&!SU.typed){e.preventDefault();SU.cir=null;SU.rr=null;render();updateHint();return true}
+  if(e.key==='Escape'&&(SU.cir||SU.rr)&&!SU.typed){/* a circle with no centre yet is only a typed number of sides: Esc drops it and goes on to leave the tool */const ph=!SU.rr&&SU.cir&&!SU.cir.c;SU.cir=null;SU.rr=null;render();updateHint();if(ph)return false;e.preventDefault();return true}
   if(e.key==='Escape'){e.preventDefault();if(SU.typed){SU.typed=''}else if(SU.sc)suScaleCancel();else if(SU.tp){SU.tp=null;render()}else if(SU.of){SU.of=null;render()}else if(SU.pp)suPPCancel();else if(SU.mv)suMoveCancel();else if(SU.rt)suRotCancel();else if(SU.rect){SU.rect=null;render()}else{SU.last=null;updateHint();vcbSync();return false}updateHint();vcbSync();return true}}
   if(!suOn()||e.altKey)return false;
   if(tool==='place'&&(k==='r'||k==='x'))return false;
@@ -3642,7 +3644,7 @@ function suOffsetPts(pts,d,closed){const n=pts.length;if(n<2)return null;let sg=
   const off=[];for(let i=0;i<(closed?n:n-1);i++){const a=pts[i],b=pts[(i+1)%n],dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy);if(!L)return null;const nx=dy/L*sg,ny=-dx/L*sg;off.push([[a[0]+nx*d,a[1]+ny*d],[b[0]+nx*d,b[1]+ny*d]])}
   const line=(s1,s2)=>{const[a,b]=s1,[c,e]=s2,r=[b[0]-a[0],b[1]-a[1]],q=[e[0]-c[0],e[1]-c[1]],den=r[0]*q[1]-r[1]*q[0];if(Math.abs(den)<1e-9)return[b[0],b[1]];const t=((c[0]-a[0])*q[1]-(c[1]-a[1])*q[0])/den;return[a[0]+r[0]*t,a[1]+r[1]*t]};
   const out=[];if(closed){for(let i=0;i<n;i++)out.push(line(off[(i-1+n)%n],off[i]))}else{out.push(off[0][0]);for(let i=1;i<off.length;i++)out.push(line(off[i-1],off[i]));out.push(off[off.length-1][1])}
-  const r=out.map(p=>[Math.round(p[0]),Math.round(p[1])]);if(closed&&(Math.sign(polyArea(r))!==Math.sign(polyArea(pts))||Math.abs(polyArea(r))<1e4))return null;return r}
+  const r=out.map(p=>[Math.round(p[0]),Math.round(p[1])]);/* an edge that comes out pointing the other way means the outline has turned inside out */if(closed)for(let i=0;i<n;i++){const a=pts[i],b=pts[(i+1)%n],c=r[i],e=r[(i+1)%n];if((b[0]-a[0])*(e[0]-c[0])+(b[1]-a[1])*(e[1]-c[1])<=0)return null}if(closed&&(Math.sign(polyArea(r))!==Math.sign(polyArea(pts))||Math.abs(polyArea(r))<1e4))return null;return r}
 function suOffStart(o){if(!o||fixed(o)||!(o.t==='room'||(o.t==='wall'&&!o.spline&&!(Array.isArray(o.bulge)&&o.bulge.some(Boolean))))){toast('Click a room or a straight wall to offset');return}
   const closed=o.t==='room'||!!o.closed;SU.of={o,closed,src:o.pts.map(p=>p.slice()),d:0,pts:null};SU.typed='';sel=new Set([o.id]);render();updateHint()}
 function suOffDist(w){const f=SU.of,P_=f.src,n=P_.length;let best=Infinity,side=1;for(let i=0;i<(f.closed?n:n-1);i++){const a=P_[i],b=P_[(i+1)%n],dx=b[0]-a[0],dy=b[1]-a[1],L2=dx*dx+dy*dy;if(!L2)continue;const t=Math.max(0,Math.min(1,((w[0]-a[0])*dx+(w[1]-a[1])*dy)/L2)),q=[a[0]+dx*t,a[1]+dy*t],d=Math.hypot(w[0]-q[0],w[1]-q[1]);if(d<best){best=d;side=((dx*(w[1]-a[1])-dy*(w[0]-a[0]))<0)?1:-1}}
@@ -3653,11 +3655,11 @@ function suOffCommit(){const f=SU.of;if(!f)return;SU.of=null;if(!f.pts||!f.d){to
   SU.last={kind:'off',ids:[n.id],copies:[],src:f.src,d:f.d,closed:f.closed};SU.last.sig=suSig();SU.last.pl=past.length;markDirty();clashDirty=true;render();renderInspector();updateHint();vcbSync()}
 
 /* ---- Scale (S): plan sizes scale about the selection's centre; heights stay ---- */
-function suScaleStart(list,w){const kit=list.concat(carried(list)),b=unionBox(list);if(!b)return;const c=[(b.x0+b.x1)/2,(b.y0+b.y1)/2];checkpoint();SU.sc={c,r0:Math.max(1/V.k*8,Math.hypot(w[0]-c[0],w[1]-c[1])),f:1,orig:kit.map(o=>[o.id,clone(o)]),w:b.x1-b.x0};SU.typed='';updateHint()}
+function suScaleStart(list,w){const kit=list.concat(carried(list)),b=unionBox(list);if(!b)return;const c=[(b.x0+b.x1)/2,(b.y0+b.y1)/2];suCP();SU.sc={c,r0:Math.max(1/V.k*8,Math.hypot(w[0]-c[0],w[1]-c[1])),f:1,orig:kit.map(o=>[o.id,clone(o)]),w:b.x1-b.x0};SU.typed='';updateHint()}
 function suScaleApply(f){const z=SU.sc;if(!z)return;z.f=f;const c=z.c,S_=p=>[Math.round(c[0]+(p[0]-c[0])*f),Math.round(c[1]+(p[1]-c[1])*f)];
   z.orig.forEach(([id,o0])=>{const o=byId(id);if(!o)return;Object.keys(o).forEach(k=>{if(!(k in o0))delete o[k]});Object.assign(o,clone(o0));
     if(o.t==='item'||o.t==='text'){const q=S_([o.x,o.y]);o.x=q[0];o.y=q[1];if(o.t==='item'){o.w=Math.max(10,Math.round(o.w*f));o.d=Math.max(10,Math.round(o.d*f))}}
-    else if(o.pts)o.pts=o.pts.map(S_);else if(o.t==='dim'){o.a=S_(o.a);o.b=S_(o.b)}});clashDirty=true;render()}
+    else if(o.pts){o.pts=o.pts.map(S_);/* a curved wall keeps its shape: the bow scales with the chord */if(Array.isArray(o.bulge))o.bulge=o.bulge.map(v=>v?Math.round(v*f):v)}else if(o.t==='dim'){o.a=S_(o.a);o.b=S_(o.b)}});clashDirty=true;render()}
 function suScaleCommit(){const z=SU.sc;if(!z)return;SU.sc=null;if(z.f===1){suPopPast();render();updateHint();return}SU.last={kind:'sc',f:z.f,st:z,ids:z.orig.map(x=>x[0]),copies:[]};SU.last.sig=suSig();SU.last.pl=past.length;markDirty();clashDirty=true;render();renderInspector();updateHint();vcbSync()}
 function suScaleCancel(){const z=SU.sc;if(!z)return;suScaleApply(1);SU.sc=null;suPopPast();render();updateHint()}
 /* ---- Tape measure (T): a guide line parallel to an edge, a set distance away; guides snap and are saved with the plan ---- */
@@ -3730,7 +3732,7 @@ function suArcWall(a,b,h){const w={id:uid(),t:'wall',pts:[a,b],th:typeof newWall
 function suArcSign(a,b,cur,h){/* bow towards the pointer whatever the sign convention of the wall drawing */const w=suArcWall(a,b,h);try{const q=wallPathPts(w),m=q[Math.floor(q.length/2)],side=p=>Math.sign((b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]));return side(m)===side(cur)?h:-h}catch(e){return h}}
 /* ---- colour by tag: plan objects tinted by their library group ---- */
 function suTagColours(on){SU.tagcol=on===undefined?!SU.tagcol:on;let st=$('#su-tagcol');if(!st){st=document.createElement('style');st.id='su-tagcol';document.head.appendChild(st)}
-  if(!SU.tagcol){st.textContent='';toast('Colour by tag off');return}const cats=[...new Set(S.objs.filter(o=>o.t==='item'&&o.cat).map(o=>o.cat))];const cls=c=>'cat-'+String(c).toLowerCase().replace(/[^a-z0-9]+/g,'-');
+  if(!SU.tagcol){st.textContent='';toast('Colour by tag off');return}/* the class each item is drawn with (catCls), so every library group is tinted */const cats=[...new Set(S.objs.filter(o=>o.t==='item'&&o.cat).map(o=>catCls(o.cat)))];const cls=c=>c;
   st.textContent=cats.map((c,i)=>`#L-items .${cls(c)} :is(rect,path,circle,ellipse,polygon){fill:hsl(${Math.round(i*137.5)%360},62%,72%)!important}`).join('');toast(`Colour by tag: ${cats.length} ${cats.length===1?'group':'groups'}`)}
 
 /* ---- Components: copies that share one definition. Edit inside any copy (double-click it); when you leave, every other copy takes the change ---- */
@@ -3747,8 +3749,8 @@ function suCompUnique(){const l=selList().filter(o=>o.cmp);if(!l.length)return;c
   mem.forEach(o=>{o.cmp=d});S.comps[d]={name:def.name+' (unique)',objs:mem.map(o=>{const c=clone(o);delete c.id;delete c.gid;c.cmp=d;return suXf(c,suInstT(mem,def),true)})};markDirty();render();toast('This copy is now its own component')}
 function suCompExplode(){const l=selList().filter(o=>o.cmp);if(!l.length)return;checkpoint();const g=l[0].gid;S.objs.forEach(o=>{if(o.gid===g){delete o.cmp;delete o.cmk}});markDirty();render();renderInspector();toast('Exploded: now a plain group')}
 function suCompPropagate(gid,d,T0,why){const def=S.comps&&S.comps[d];if(!def)return 0;const mem=S.objs.filter(o=>o.gid===gid);let k=Math.max(-1,...def.objs.map(c=>+c.cmk||0))+1;mem.forEach(o=>{if(o.cmp!==d){o.cmp=d;o.cmk=k++}});
-  const nd=mem.map(o=>{const c=clone(o);delete c.id;delete c.gid;return suXf(c,T0,true)});const inst=suInstances(d);let n=0;
-  Object.keys(inst).forEach(g2=>{if(g2===gid)return;const m2=inst[g2],T2=suInstT(m2,def),gone=new Set(m2.map(o=>o.id));S.objs=S.objs.filter(o=>!gone.has(o.id));nd.forEach(c=>{const o=clone(c);o.id=uid();o.gid=g2;suXf(o,T2,false);S.objs.push(o)});n++});
+  const src=mem.map(o=>o.id),nd=mem.map(o=>{const c=clone(o);delete c.id;delete c.gid;return suXf(c,T0,true)});const inst=suInstances(d);let n=0;
+  Object.keys(inst).forEach(g2=>{if(g2===gid)return;const m2=inst[g2],T2=suInstT(m2,def),gone=new Set(m2.map(o=>o.id));S.objs=S.objs.filter(o=>!gone.has(o.id));/* each part keeps the id it had in this copy, and items follow the room of their own copy */const used=new Set(),ids=nd.map(c=>{const old=m2.find(x=>x.cmk===c.cmk&&!used.has(x.id)),id=old?old.id:uid();used.add(id);return id});nd.forEach((c,i)=>{const o=clone(c);o.id=ids[i];o.gid=g2;if(o.tp){const j=src.indexOf(o.tp);if(j>=0)o.tp=ids[j];else delete o.tp}suXf(o,T2,false);S.objs.push(o)});n++});
   def.objs=nd;return n}
 function suCompPurge(){const used=new Set(S.objs.map(o=>o.cmp).filter(Boolean));const dead=Object.keys(S.comps||{}).filter(d=>!used.has(d));if(!dead.length)return toast('Nothing to purge');checkpoint();dead.forEach(d=>delete S.comps[d]);if(!Object.keys(S.comps).length)delete S.comps;markDirty();toast(`Purged ${dead.length} unused ${dead.length===1?'component':'components'}`);suOutlinerUI()}
 /* ---- Outliner: components, groups and rooms in one list; click to select, double-click a component to rename ---- */
@@ -3761,7 +3763,7 @@ function suOutlinerOpen(){let m=$('#su-outliner');if(!m){m=document.createElemen
 function suOutlinerUI(keep){const box=$('#su-ol-list');if(!box)return;const f=(($('#su-ol-f')||{}).value||'').toLowerCase(),ok=t=>!f||String(t).toLowerCase().includes(f);let h='';
   const comps=Object.entries(S.comps||{}).filter(([d,c])=>ok(c.name));if(comps.length)h+='<div class="grp">Components</div>'+comps.map(([d,c])=>{const n=Object.keys(suInstances(d)).length;return`<button type="button" class="ol-row" data-ol="comp" data-v="${d}" title="Select every copy · double-click to rename">◈ ${esc(c.name)} <span class="muted">${n} ${n===1?'copy':'copies'}</span></button>`}).join('');
   const gs={};S.objs.forEach(o=>{if(o.gid&&!o.cmp)(gs[o.gid]=gs[o.gid]||[]).push(o)});const gl=Object.entries(gs).filter(([g,l])=>ok('group '+l.map(o=>o.name||'').join(' ')));if(gl.length)h+='<div class="grp">Groups</div>'+gl.map(([g,l])=>`<button type="button" class="ol-row" data-ol="grp" data-v="${g}">▣ Group of ${l.length} <span class="muted">${esc(l.slice(0,3).map(o=>o.name||o.t).join(', '))}</span></button>`).join('');
-  const rs=S.objs.filter(o=>o.t==='room'&&ok(o.name||'Room'));if(rs.length)h+='<div class="grp">Rooms</div>'+rs.map(o=>`<button type="button" class="ol-row" data-ol="room" data-v="${o.id}">▢ ${esc(o.name||'Room')} <span class="muted">${(Math.abs(polyArea(o.pts))/2e6).toFixed(1)} m²</span></button>`).join('');
+  const rs=S.objs.filter(o=>o.t==='room'&&ok(o.name||'Room'));if(rs.length)h+='<div class="grp">Rooms</div>'+rs.map(o=>`<button type="button" class="ol-row" data-ol="room" data-v="${o.id}">▢ ${esc(o.name||'Room')} <span class="muted">${(Math.abs(polyArea(o.pts))/1e6).toFixed(1)} m²</span></button>`).join('');
   box.innerHTML=h||'<p class="muted">Nothing here yet.</p>'}
 
 /* ---- 3D styles: hidden line (white faces, black edges) and sketchy edges; section fill on cut walls ---- */
@@ -3787,13 +3789,14 @@ function suMatsOpen(){let m=$('#su-mats');if(!m){m=document.createElement('div')
 /* ---- Push/Pull (SketchUp's extrude). StoreyBook objects keep their type, so pulling sets a value:
    an item's height; a wall or floor's floor-to-ceiling height (the building's walls share it per floor) ---- */
 function suPPTarget(o,wallHit){if(!o)return null;
-  if(o.t==='item'&&!isSite(o))return{key:'h:'+o.id,label:'Height',get:()=>+o.h||0,set:v=>{o.h=Math.round(Math.max(10,Math.min(30000,v)))},ids:[o.id]};
-  if((o.t==='room'||o.t==='wall'||wallHit)&&S.bld){const l=bldLevel(S);return{key:'c:'+l.id,label:'Floor to ceiling',get:()=>lvVal(S.bld,l,'ceiling'),set:v=>{l.ceiling=Math.round(Math.max(1000,Math.min(30000,v)))},ids:[]}}
+  /* looked up afresh each time: Undo replaces the plan's objects, and a kept reference would write to one that is gone */
+  if(o.t==='item'&&!isSite(o)){const id=o.id;return{key:'h:'+id,label:'Height',get:()=>{const q=byId(id);return q?+q.h||0:0},set:v=>{const q=byId(id);if(q)q.h=Math.round(Math.max(10,Math.min(30000,v)))},ids:[id]}}
+  if((o.t==='room'||o.t==='wall'||wallHit)&&S.bld){const lid=bldLevel(S).id,L=()=>(S.bld&&S.bld.levels.find(x=>x.id===lid))||bldLevel(S);return{key:'c:'+lid,label:'Floor to ceiling',get:()=>lvVal(S.bld,L(),'ceiling'),set:v=>{L().ceiling=Math.round(Math.max(1000,Math.min(30000,v)))},ids:[]}}
   if(o.t==='room'||o.t==='wall'||wallHit){toast('Walls take their height from the floor. Set up the building in Details › Floors to pull it');return null}
   return null}
 function suPPStart(t,ev,ppm){SU.pp={t,v0:t.get(),y0:ev?ev.clientY:0,ppm:ppm||0,moved:false,cp:false,armed:false};SU.typed='';updateHint();vcbSync()}
 let suPPraf=0;
-function suPPSet(v){const p=SU.pp;if(!p)return;if(!p.cp){checkpoint();p.cp=true}p.t.set(v);markDirty();clashDirty=true;if(is3D){if(!suPPraf)suPPraf=requestAnimationFrame(()=>{suPPraf=0;build3D()})}else render();vcbSync();updateHint()}
+function suPPSet(v){const p=SU.pp;if(!p)return;if(!p.cp){suCP();p.cp=true}p.t.set(v);markDirty();clashDirty=true;if(is3D){if(!suPPraf)suPPraf=requestAnimationFrame(()=>{suPPraf=0;build3D()})}else render();vcbSync();updateHint()}
 function suPPCommit(){const p=SU.pp;if(!p)return;SU.pp=null;if(!p.cp||p.t.get()===p.v0){if(p.cp)suPopPast();suPPAfter();return}SU.last={kind:'pp',t:p.t,ids:p.t.ids,copies:[],v:p.t.get()};SU.last.sig=suSig();SU.last.pl=past.length;suPPAfter();suChipFor()}
 function suPPCancel(){const p=SU.pp;if(!p)return;SU.pp=null;if(p.cp){p.t.set(p.v0);suPopPast()}suPPAfter()}
 function suPPAfter(){if(T3&&T3.controls)T3.controls.enabled=true;markDirty();renderInspector();updateHint();vcbSync();if(is3D)build3D();else render()}
@@ -3815,7 +3818,7 @@ function suChipFor(){const L=SU.last;if(!L||L.kind!=='pp')return;if(!suChip){suC
   host.addEventListener('pointerup',e=>{const p=SU.pp;if(!p||tool!=='su-push')return;e.stopImmediatePropagation();if(p.down&&Math.hypot(e.clientX-p.down[0],e.clientY-p.down[1])>6){suPPCommit()}else{p.armed=true;p.down=null;updateHint()}},true);
 })();
 /* 2D: click what to set, then type the height */
-svg.addEventListener('pointerdown',ev=>{if(tool!=='su-push'||ev.button!==0)return;ev.stopImmediatePropagation();ev.preventDefault();const el=ev.target.closest&&ev.target.closest('[data-id]');const o=el?byId(el.dataset.id):null;const t=suPPTarget(o,false);if(!t){if(!o)toast('Click an item, a room or a wall');return}
+svg.addEventListener('pointerdown',ev=>{if(tool!=='su-push'||ev.button!==0||spaceDown)return;if(ev.pointerType==='touch'){if(pointers.size>0)return;pointers.set(ev.pointerId,[ev.clientX,ev.clientY,performance.now()])}ev.stopImmediatePropagation();ev.preventDefault();const el=ev.target.closest&&ev.target.closest('[data-id]');const o=el?byId(el.dataset.id):null;const t=suPPTarget(o,false);if(!t){if(!o)toast('Click an item, a room or a wall');return}
   sel=new Set([o.id]);SU.last={kind:'pp',t,ids:t.ids,copies:[],v:t.get()};SU.last.sig=suSig();SU.last.pl=-1;render();renderInspector();updateHint();vcbSync();suChipFor()},true);
 /* Settings › Keys and tools: switch between StoreyBook's keys and SketchUp's */
 (()=>{const pop=$('#pop-set');if(!pop)return;const h=pop.querySelector('h3');const box=document.createElement('div');
@@ -3832,7 +3835,7 @@ document.addEventListener('paste',e=>{
   if(im){if(S.underlay&&S.underlay.src){toast('To replace the floor plan with the copied image, use Underlay › Paste image');return}const f=im.getAsFile();if(f){const named=new File([f],'Pasted floor plan.'+(f.type.split('/')[1]||'png').replace('jpeg','jpg'),{type:f.type});loadUnderFile(named);return}}
   pasteClip(true);
 });
-document.addEventListener('keyup',e=>{const wk=walkKey(e);if(wk)WALK.keys.delete(wk);if(e.key==='Shift'||!e.shiftKey)WALK.keys.delete('shift');if(e.key===' '){if(SU&&suOn()&&!SU.spaceUsed&&!WALK.on&&!['input','textarea','select'].includes((e.target.tagName||'').toLowerCase()))setTool('select');spaceDown=false;svg.style.cursor=tool==='pan'?'grab':(tool==='select'?'default':'crosshair')}});
+document.addEventListener('keyup',e=>{const wk=walkKey(e);if(wk)WALK.keys.delete(wk);if(e.key==='Shift'||!e.shiftKey)WALK.keys.delete('shift');if(e.key===' '){if(SU&&suOn()&&spaceDown&&!SU.spaceUsed&&!WALK.on&&!['input','textarea','select'].includes((e.target.tagName||'').toLowerCase())&&!(e.target.matches&&e.target.matches('button:focus-visible,a:focus-visible,summary:focus-visible,[role=button]:focus-visible')))setTool('select');spaceDown=false;svg.style.cursor=tool==='pan'?'grab':(tool==='select'?'default':'crosshair')}});
 
 /* ================= sample floor ================= */
 /*@dev-only*/function loadSample(){
@@ -5853,6 +5856,7 @@ function applyTab(t){
   /* an AI preview belongs to the plan it was made on: it is parked with that tab and comes back with it */
   if(curTab&&curTab!==t&&AI.pending){curTab.aiPend=AI.pending;AI.pending=null;if(cmp&&cmp.snapId==null)cmp=null}
   if(WALK.on)walkStop(true);if(tool!=='select')setTool('select');calib=null;detBox=false;underMove=false;walkPick=false;
+  /* hidden objects, an open group and the last typed-over step belong to the plan being left */if(typeof SU!=='undefined'&&SU){if(SU.gctx)try{suGroupLeave()}catch(e){}SU.gctx=null;SU.cedit=null;SU.last=null;SU.typed='';SU.fut=null;if(curTab&&curTab!==t){curTab.suHidden=SU.hidden;SU.hidden=t.suHidden||new Set();SU.views=[]}}
   curTab=t;S=t.S;sel=t.sel||new Set();fileHandle=t.fileHandle||null;dirty=!!t.dirty;past=t.past||[];future=t.future||[];pdfDoc=t.pdfDoc||null;pdfName=t.pdfName||'';
   if(S.underlay&&S.underlay.src){S.underlay.uid=S.underlay.uid||uid();underCache[S.underlay.uid]=S.underlay.src}
   $('#pname').value=S.name;syncLock();syncUnder();clashDirty=true;
