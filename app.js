@@ -3834,7 +3834,11 @@ svg.addEventListener('pointerdown',ev=>{if(tool!=='su-push'||ev.button!==0||spac
 /* Settings › Keys and tools: switch between StoreyBook's keys and SketchUp's */
 (()=>{const pop=$('#pop-set');if(!pop)return;const h=pop.querySelector('h3');const box=document.createElement('div');
   box.innerHTML='<div class="grp">Keys and tools</div><div class="set"><span>Key bindings</span><select id="s-keys" aria-label="Key bindings"><option value="su">SketchUp</option><option value="sb">StoreyBook</option></select></div><div class="set"><span>SketchUp keys and tools</span><button class="btn sm" type="button" id="s-keys-sheet">Show…</button></div>';
-  h.after(...box.childNodes);const sl=$('#s-keys');const sync=()=>{sl.value=suOn()?'su':'sb'};sync();
+  box.innerHTML+='<div class="grp">3D view</div><div class="set"><span>Smooth edges in 3D</span><label class="sw"><input type="checkbox" id="s-aa" aria-label="Smooth edges in 3D"><span></span></label></div>';
+  h.after(...box.childNodes);{const aa=$('#s-aa');aa.checked=!!P.aa3d;aa.title='Smoother edges, slower 3D. Off by default';
+    /* the browser fixes edge smoothing when the 3D view is first made, so a change after that needs the page loaded again (every plan is autosaved) */
+    aa.addEventListener('change',()=>{P.aa3d=aa.checked;savePrefs();if(!T3){toast(P.aa3d?'Smooth edges on':'Smooth edges off: 3D draws faster');return}if(confirm('Smooth edges '+(P.aa3d?'on':'off')+'.\n\nThe 3D view picks this up when the page loads. Reload now? Your plans are autosaved.'))location.reload();else toast('It takes effect the next time the page loads')})}
+  const sl=$('#s-keys');const sync=()=>{sl.value=suOn()?'su':'sb'};sync();
   sl.addEventListener('change',()=>{P.suKeys=sl.value==='su';P.suWelcome=1;savePrefs();suCancelAll();suTips();updateHint();vcbSync();toast(P.suKeys?'SketchUp keys and tools: L walls, R rectangle, M move, Q rotate, E eraser, Space select':'StoreyBook keys: W walls, D room, M measure, R turns 90°, V select')});
   $('#s-keys-sheet').addEventListener('click',()=>suSheetOpen(false));
   new MutationObserver(()=>{if(!pop.hidden)sync()}).observe(pop,{attributes:true,attributeFilter:['hidden']})})();
@@ -3917,7 +3921,7 @@ function init3D(){
   const THREE=window.THREE;if(!THREE||!THREE.OrbitControls)throw new Error('the 3D library did not load');
   const cv=$('#v3c');
   /* no preserveDrawingBuffer: the PNG export and camera views render immediately before reading pixels, so the buffer never has to be kept */
-  const renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,preserveDrawingBuffer:false});
+  const renderer=new THREE.WebGLRenderer({canvas:cv,/* edge smoothing costs frame rate: off unless Settings > Smooth edges in 3D is on */antialias:!!P.aa3d,preserveDrawingBuffer:false});
   /* the browser can take the graphics away (driver reset, too many tabs): say so, and redraw when they come back */
   cv.addEventListener('webglcontextlost',e=>{e.preventDefault();toast('3D has stopped: the browser reset the graphics. It restarts by itself; if it does not, go to 2D and back')});cv.addEventListener('webglcontextrestored',()=>{try{build3D()}catch(e){}toast('3D is back')});
   /* phones and tablets: cap the pixel ratio at 1.5, use the cheaper shadow filter and smaller shadow maps; a 390-px phone at 1.5× is still sharp and renders about half the pixels of 2× */
