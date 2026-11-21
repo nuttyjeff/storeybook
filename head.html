@@ -437,8 +437,8 @@ input[type=checkbox]{accent-color:var(--accent)}
 .upd{position:absolute;top:max(10px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:60;background:var(--panel);color:var(--ink);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:999px;padding:6px 8px 6px 14px;font-size:13px;display:flex;align-items:center;gap:10px}
 .upd[hidden],.cmp-legend[hidden],.esc[hidden],.esc-all[hidden]{display:none}
 html.touch button,html.touch [role=button],html.touch .btn{touch-action:manipulation}
-/* phones (and short landscape screens): every control is at least 40 px to hit with a finger */
-@media (max-width:820px),(max-height:500px){
+/* phones, short screens and iPads: every control is 40 px or more for a finger */
+@media (max-width:820px),(max-height:500px),(pointer:coarse){
   /* only controls in the app's bars, sheets, menus and dialogs: helper buttons laid over the plan or the 3D view keep their own size */
   html.touch :is(header,.top,.mbar,.pop,.drawer,.psheet,.keys-modal,.modal,.sun-bar,.pstrip,.paintstrip,#paintstrip,#multibar,#ctxmenu,#plans-modal,#snap-modal,#mig-modal,#guide-modal,.esc,.polybar,#polybar,.walk-hud,.tabs,.ptabs) :is(button,.btn,.chip,.csw,.cdef,select,input[type=color],[role=button]){min-height:40px!important;min-width:40px!important}
   html.touch .sw{min-height:32px}html.touch .sw input{min-height:32px!important;margin:0!important;top:-5px}
