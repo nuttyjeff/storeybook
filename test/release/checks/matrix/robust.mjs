@@ -138,7 +138,7 @@ async function fuzzOne(b,kind,seed,N,add){
   const fail={};INVK.forEach(k=>fail[k]=null);let pg=null;const log=[];let step=0;
   const note=(k,v)=>{if(!fail[k])fail[k]={step,last:log.slice(-4),v}};
   try{pg=await openPage(b,kind);pg.confirmYes=false;
-    const tab0=await ev(pg,()=>window.__osp.curTab().id);const start=await canon(pg);const n0=await ev(pg,()=>window.__osp.S().objs.length);
+    const tab0=await ev(pg,()=>window.__osp.curTab().id);const start=await canon(pg);const floor0=await ev(pg,()=>window.__osp.S().bld?window.__osp.S().bld.active:null);const n0=await ev(pg,()=>window.__osp.S().objs.length);
     const how=()=>kind==='ipad'?(R()<0.5?'pen':'finger'):kind==='iphone'?'finger':'mouse';
     const gesture=async(k)=>{const sp=Array.from({length:6},()=>[R(),R()]);const c=await ev(pg,CANVAS,sp);const h=how();
       const a=(c.objs.length&&R()<0.55)?pick(c.objs):c.pts[0];const z=c.pts[1]||c.pts[0];if(!a||!z)return 'no canvas point';
@@ -170,7 +170,7 @@ async function fuzzOne(b,kind,seed,N,add){
           if(!c.err&&c.hit){await tapAt(pg,c.x,c.y,how());const ok=await waitF(pg,to3=>to3?(!document.querySelector('#v3').hidden&&window.__osp.T3()&&!!window.__osp.T3().renderer):document.querySelector('#v3').hidden,to3,30000);d=(to3?'to 3D':'to 2D')+(ok?'':' (did not switch)');in3=to3&&ok?1:0;if(to3&&ok)await sleep(400)}else{d='view button not reachable: '+(c.err||c.top);in3=0}}
         else if(k==='selslot'){const c=await where(pg,'#mbar [data-m=select]');if(!c.err&&c.hit){await tapAt(pg,c.x,c.y,'finger');d='Select slot'}}
       }catch(e){d=k+' threw '+String(e.message||e).slice(0,80)}
-      log.push(step+':'+d);if(process.env.SB_DEBUG)console.error(kind,step,Date.now()%100000,d);await sleep(30);
+      log.push(step+':'+d);await sleep(30);if(process.env.SB_DEBUG){/* trace for undo bugs: a step that changes the plan without growing the undo stack is the culprit */const c=await canon(pg).catch(()=>'');let h=0;for(let i=0;i<c.length;i++)h=(h*31+c.charCodeAt(i))|0;const st=await ev(pg,()=>{const o=window.__osp;return[o.past(),o.future(),o.curTab().id,o.S().objs.length,o.isDirty()?1:0]}).catch(()=>[]);console.error(kind,step,d,'| past',st[0],'fut',st[1],'tab',st[2],'n',st[3],'h',h)}
       let inv;try{inv=await ev(pg,INV)}catch(e){inv={json:'invariant eval threw '+String(e.message||e).slice(0,80)}}
       if(pg.errs.length>e0)note('err',pg.errs.slice(e0,e0+2));
       if(inv.json)note('json',inv.json);for(const q of ['fin','dup','sel','stuck','tool'])if(inv[q]&&inv[q].length)note(q,inv[q]);}
@@ -191,7 +191,12 @@ async function fuzzOne(b,kind,seed,N,add){
     /* how many steps undo will walk back; redo walks forward exactly that many (a session that ended with steps already undone keeps them on the redo stack, and redo-all would rightly go past the end) */
     const p0=back?await ev(pg,()=>window.__osp.past()):0;
     let pres=0;const t0=Date.now();
-    if(back){while(await ev(pg,()=>window.__osp.past())>0&&pres<N*3&&Date.now()-t0<40000){await press(pg,'#b-undo').catch(()=>{});pres++}}
+    /* each floor, and the roof, keeps its own undo history (by design), so "undo all" means undo all here, then on every other level the session touched, then come back to where it started. Found 11 Nov 2026: a session that ended on the roof left a desk move on L1 that the roof's Undo rightly could not reach */
+    const undoHere=async()=>{while(await ev(pg,()=>window.__osp.past())>0&&pres<N*3&&Date.now()-t0<40000){await press(pg,'#b-undo').catch(()=>{});pres++}};
+    if(back){await undoHere();
+      if(await ev(pg,()=>window.__osp.roofMode())){await ev(pg,()=>window.__osp.switchFloor('roof'));await sleep(150);await undoHere()}
+      const here=await ev(pg,()=>window.__osp.S().bld.active);for(const id of await ev(pg,()=>window.__osp.S().bld.levels.map(l=>l.id))){if(id===here)continue;await ev(pg,id=>window.__osp.switchFloor(id),id);await sleep(150);await undoHere()}
+      await ev(pg,id=>{const o=window.__osp;if(o.S().bld.levels.some(l=>l.id===id))o.switchFloor(id)},floor0);await sleep(150)}
     const afterU=await canon(pg);
     add(P+'undo',`${S} fuzz: ${INVN.undo}`,back&&afterU===start,{seed,presses:pres,back,differs:afterU===start?[]:diffKeys(start,afterU)});
     let rp=0;const t1=Date.now();if(back){while(await ev(pg,()=>window.__osp.future())>0&&rp<p0&&Date.now()-t1<40000){await press(pg,'#b-redo').catch(()=>{});rp++}}
@@ -214,7 +219,8 @@ async function dragW(pg,a,b,steps=8){const p=await w2s(pg,a[0],a[1]),q=await w2s
 const itemPt=async(pg,pred)=>{await frame(pg);return itemPt0(pg,pred)};
 const itemPt0=(pg,pred)=>ev(pg,pred=>{const o=window.__osp,S=o.S(),f=new Function('x','return ('+pred+')(x)');for(const it of S.objs){if(it.t!=='item'||!f(it))continue;const e=document.querySelector(`#plan [data-id="${it.id}"]`);if(!e)continue;const r=e.getBoundingClientRect();if(r.width<10||r.height<10)continue;
   const x=r.left+r.width/2,y=r.top+r.height/2;const h=document.elementFromPoint(x,y);const c=h&&h.closest('[data-id]');if(c&&c.dataset.id===it.id)return {id:it.id,x,y,ox:it.x,oy:it.y,gid:it.gid||null}}return null},String(pred));
-async function inspTab(pg,k){if(await ev(pg,()=>document.querySelector('#d-insp').hidden))await press(pg,'#t-insp');await press(pg,'#tab-'+k);if(!await waitF(pg,k=>!document.querySelector('#p-'+k).hidden,k,2000))throw new Error('tab '+k+' did not show')}
+async function inspTab(pg,k){/* 5.0.0 test 29: Underlay opens from the menu, not a tab */if(k==='und'){if(await ev(pg,()=>!document.querySelector('#d-insp').hidden&&!document.querySelector('#p-und').hidden))return;await menu(pg,'m-undp');if(!await waitF(pg,()=>!document.querySelector('#d-insp').hidden&&!document.querySelector('#p-und').hidden,null,3000))throw new Error('Underlay panel did not open from the menu');return}
+  if(await ev(pg,()=>document.querySelector('#d-insp').hidden))await press(pg,'#t-insp');await press(pg,'#tab-'+k);if(!await waitF(pg,k=>!document.querySelector('#p-'+k).hidden,k,2000))throw new Error('tab '+k+' did not show')}
 async function typeInto(pg,sel,text,key='Enter'){const c=await press(pg,sel);await ev(pg,s=>{const e=document.querySelector(s);if(e&&e.select)e.select()},sel);await pg.keyboard.type(text,{delay:0});if(key)await pg.keyboard.press(key);await sleep(80);return c}
 const blur=async pg=>{await ev(pg,()=>{const e=document.activeElement;if(e&&e.blur)e.blur()});await frame(pg)};
 const nObjs=pg=>ev(pg,()=>window.__osp.S().objs.length);

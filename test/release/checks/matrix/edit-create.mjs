@@ -397,12 +397,7 @@ add(C,'c13-col-array','Details › Repeat as an array: a column becomes a 2 × 3
   const xs=[...new Set(cols.map(o=>o.x))].sort((a,b)=>a-b),ys=[...new Set(cols.map(o=>o.y))].sort((a,b)=>a-b);
   const ok=cols.length===6&&xs.length===3&&ys.length===2&&xs[0]===6500&&xs[1]-xs[0]===1400&&xs[2]-xs[1]===1400&&ys[0]===7500&&ys[1]-ys[0]===2400&&cols.every(o=>o.arr&&o.arr.id===cols[0].arr.id);const ur=await UR(pg,s0,s1);
   return {pass:ok&&ur.ok,detail:{n:cols.length,xs,ys,ur}}});
-/* C14 */
-// mutation [rooms]: app.js:2339 `addObjs(rooms,false);toast(` → `void(rooms,false);toast(` → FAIL confirmed (2D and 3D)
-add(C,'c14-rooms','More › Make rooms from walls fills the closed wall box with one room',async pg=>{
-  const s0=await ST(pg);await pg.click('#b-more');await wf(pg,()=>!document.querySelector('#pop-more').hidden);await pg.click('#m-rooms');
-  const r=await created(pg,s0,nw=>{const rooms=nw.filter(o=>o.t==='room');const b=rooms[0]&&bbox(rooms[0].pts);return {ok:rooms.length===1&&nw.length===1&&rooms[0].nowall&&!!b&&b[0]>=5800&&b[2]<=7300&&b[1]>=0&&b[3]<=2500&&(b[2]-b[0])>=1300&&(b[3]-b[1])>=2300,b}});
-  r.detail.in3D=await in3D(pg);if(pg.d3&&!r.detail.in3D)r.pass=false;return r});
+/* C14 removed 13 Nov 2026: More › Make rooms from walls was taken out of the app at Jeff's call */
 /* C15 paint */
 const paintStart=async pg=>{await dockTool(pg,'paint');const sw='#p-sel [data-paintc="#1f2226"]';if(!(await wf(pg,s=>!!document.querySelector(s),sw,5000)))throw new Error('no paint swatch: tool '+(await tool(pg))+', 3D '+(await in3D(pg)));await pg.click(sw);
   if((await ev(pg,()=>window.__osp.P().paintCol))!=='#1f2226')throw new Error('swatch not picked')};

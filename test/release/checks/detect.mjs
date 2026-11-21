@@ -9,6 +9,8 @@ const CASES=[
   {id:'flat-pdf',    rooms:5, doors:5, wins:6, cols:0,walls:0.9},
   {id:'small-single',rooms:3, doors:3, wins:0, cols:0,walls:0.9},
   {id:'flat-hatch',  rooms:5, doors:5, wins:7, cols:0,walls:0.9},
+  /* a rendered colour plan: mid-grey walls on tinted floors, a core shown as a dark fill, windows as pale gaps in the outside wall (16 Nov 2026, after a real marketing plan traced as 5 scraps of rooms) */
+  {id:'colour-render',rooms:4, doors:0, wins:8, cols:0,walls:0.85},
 ];
 const segDist=(px,py,a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1],L2=dx*dx+dy*dy;let t=L2?((px-a[0])*dx+(py-a[1])*dy)/L2:0;t=Math.max(0,Math.min(1,t));return Math.hypot(px-a[0]-t*dx,py-a[1]-t*dy)};
 const inPoly=(x,y,p)=>{let c=false;for(let i=0,j=p.length-1;i<p.length;j=i++){const a=p[i],b=p[j];if(((a[1]>y)!==(b[1]>y))&&(x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0]))c=!c}return c};

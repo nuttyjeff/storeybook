@@ -255,7 +255,7 @@ async function fxSetup(b,{d3=false,phone=false,small=false,warm=false}={}){
   pg.setDefaultTimeout(10000);/* a control that cannot be used fails its row fast */
   pg.d3=d3;pg.base=await STATE(pg);return pg}
 const H3F={ceil:2800,wallH:2800};
-async function selectObj(pg,id){await blur(pg);await ev(pg,id=>{window.__osp.setSel(id?[id]:[]);const t=document.querySelector('[data-tab=sel]');if(t&&document.querySelector('#p-sel').hidden)t.click()},id);
+async function selectObj(pg,id){await blur(pg);/* leaving a Details field redraws the panel on the next tick; let that happen before picking a control, or the control picked is a node about to be thrown away (the cause of the one-in-four colour wheel failures, backlog row 107) */await ev(pg,()=>new Promise(r=>setTimeout(r,20)));await ev(pg,id=>{window.__osp.setSel(id?[id]:[]);const t=document.querySelector('[data-tab=sel]');if(t&&document.querySelector('#p-sel').hidden)t.click()},id);
   return wf(pg,id=>{const s=window.__osp.sel();return id?s.length===1&&s[0]===id&&!document.querySelector('#p-sel').hidden&&document.querySelector('#p-sel').children.length>0:s.length===0},id)}
 /* poll a page function until the matcher accepts its value */
 async function until(pg,fn,arg,ok,t=5000){if(typeof fn==='function')fn=fn.toString();const end=Date.now()+t;let v;for(;;){v=await ev(pg,([f,a])=>{try{return (0,eval)('('+f+')')(a)}catch(e){return 'ERR '+e.message}},[fn,arg]);if(ok(v))return {ok:true,v};if(Date.now()>end)return {ok:false,v};await pg.waitForTimeout(50)}}
@@ -289,7 +289,7 @@ async function fieldCase(pg,c){const f=[];const e0=pg.errs.length;
     if(c.kind==='num'||c.kind==='text')await typeIn(pg,loc,c.val);
     else if(c.kind==='select'){await clickEl(pg,loc);await pg.keyboard.press('Escape');await pg.locator(loc.sel).nth(loc.nth).selectOption(String(c.val),{force:true})}
     else if(c.kind==='range'){await clickEl(pg,loc);for(const k of c.keys||[])await pg.keyboard.press(k);await blur(pg)}
-    else if(c.kind==='color'){await pg.locator(loc.sel).nth(loc.nth).fill(c.val,{force:true});await blur(pg)}/* the native colour dialog cannot be driven; fill sets the value and fires input + change as the dialog does */
+    else if(c.kind==='color'){await ev(pg,()=>new Promise(r=>setTimeout(r,20)));await pg.locator(loc.sel).nth(loc.nth).fill(c.val,{force:true});await blur(pg)}/* the native colour dialog cannot be driven; fill sets the value and fires input + change as the dialog does */
     else await clickEl(pg,loc);/* check, button, swatch */
   }catch(e){f.push('control: '+String(e.message).split('\n')[0])}
   const r=await until(pg,c.prop,c.obj,matcher(c.exp,p0));if(!r.ok)f.push(`value ${J(r.v)} ≠ ${J(c.exp)}`);

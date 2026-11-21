@@ -102,7 +102,7 @@ const nObjs=pg=>ev(pg,()=>window.__osp.S().objs.length);
 async function hardReset(pg){
   const su=pg.su;
   await ev(pg,()=>{const o=window.__osp,g=s=>document.querySelector(s);if(o.WALK.on)g('#b-walk').click();if(o.roofMode())o.switchFloor(o.S().bld.active);
-    document.querySelectorAll('.keys-modal').forEach(p=>p.hidden=true);if(!g('#multibar').hidden)g('#multi-done').click();
+    document.querySelectorAll('.keys-modal,.cmdk').forEach(p=>p.hidden=true);if(!g('#multibar').hidden)g('#multi-done').click();
     if(!g('#msheet').hidden)g('[data-msheet-close]').click();if(o.SUN().on)g('#v3-sun').click();
     for(let i=0;i<6&&LIVE_ESC();i++)g('#esc').click();
     function LIVE_ESC(){const h=g('#hint');const ht=h&&!h.hidden?(h.querySelector('b')||{}).textContent||'':'';return /^(Calibrate|Move underlay|Walk · step 1|Detect walls)/.test(ht)||(o.polyPts()||[]).length>0}
@@ -180,6 +180,8 @@ async function openMenu(pg){if(await ev(pg,()=>!document.querySelector('#pop-mor
 async function menuItem(pg,id){await openMenu(pg);await tapEl(pg,'#'+id)}
 async function moreTile(pg,id){await tapEl(pg,'#mbar [data-m=more]');await tapEl(pg,`#msheet [data-pm="${id}"]`)}
 async function openInspTab(pg,tab){
+  /* 5.0.0 test 29: Underlay is no longer a tab; it opens from the menu (phones: the More sheet) */
+  if(tab==='und'){if(await ev(pg,()=>{const d=document.querySelector('#d-insp'),p=document.querySelector('#p-und');return !d.hidden&&!p.hidden&&d.getBoundingClientRect().width>0}))return;if(isPhone(pg))await moreTile(pg,'m-undp');else await menuItem(pg,'m-undp');await pg.waitForFunction(()=>!document.querySelector('#d-insp').hidden&&!document.querySelector('#p-und').hidden,null,{timeout:3000});return}
   if(isPhone(pg)){if(!(await visible(pg,'#d-insp')))await tapEl(pg,'#mbar [data-m=insp]')}else if(!(await visible(pg,'#d-insp')))await tapEl(pg,'#t-insp');
   await tapEl(pg,`#d-insp [data-tab="${tab}"]`)}
 async function openSettings(pg){if(isPhone(pg))await moreTile(pg,'b-set');else await tapEl(pg,'#b-set');await pg.waitForFunction(()=>!document.querySelector('#pop-set').hidden,null,{timeout:3000})}
@@ -256,12 +258,12 @@ async function hardResetKeep(pg){await ev(pg,()=>{const o=window.__osp,g=s=>docu
 /* ---------------- the user agent: one step out, using only what this setup offers ---------------- */
 const SCAN=()=>{const o=window.__osp,S=o.S(),g=s=>document.querySelector(s);const vis=e=>{if(!e||e.hidden||e.closest('[hidden]'))return false;const r=e.getBoundingClientRect(),cs=getComputedStyle(e);return r.width>0&&r.height>0&&cs.display!=='none'&&cs.visibility!=='hidden'};
   const h=g('#hint');const ht=h&&!h.hidden?(h.querySelector('b')||{}).textContent||'':'';const on=g('.dock .btn.on[data-tool]');
-  return {modal:([...document.querySelectorAll('.keys-modal')].find(p=>!p.hidden)||{}).id||null,pop:([...document.querySelectorAll('.pop')].find(vis)||{}).id||null,msheet:vis(g('#msheet')),
+  return {modal:([...document.querySelectorAll('.keys-modal,.cmdk')].find(p=>!p.hidden)||{}).id||null,pop:([...document.querySelectorAll('.pop')].find(vis)||{}).id||null,msheet:vis(g('#msheet')),
     drawer:innerWidth<=820?(vis(g('#d-lib'))?'d-lib':vis(g('#d-insp'))?'d-insp':null):null,multibar:vis(g('#multibar')),pstrip:vis(g('#pstrip')),paintstrip:vis(g('#paintstrip')),esc:vis(g('#esc')),
     walk:o.WALK.on,walkPick:/^Walk · step 1/.test(ht),calib:/^Calibrate/.test(ht),underMove:/^Move underlay/.test(ht),detBox:/^Detect walls/.test(ht),
     rcp:!!o.P().rcp,sun:o.SUN().on,bld:o.bldView(),roof:o.roofMode(),secOn:!g('#v3').hidden&&!!(S.section&&S.section.on),tool:on?on.dataset.tool:'(none)',
     line:(o.polyPts()||[]).length,sel:o.sel().length,pin:!!o.pinSel(),sec:!!o.secSel(),is3D:!g('#v3').hidden}};
-const CLOSE_OF={'keys-modal':'#keys-modal [data-kclose]','plans-modal':'#plans-modal [data-pclose]','guide-modal':'#guide-modal [data-gclose]','mig-modal':'#mig-cancel','snap-modal':'#snap-close'};
+const CLOSE_OF={'keys-modal':'#keys-modal [data-kclose]','plans-modal':'#plans-modal [data-pclose]','guide-modal':'#guide-modal [data-gclose]','mig-modal':'#mig-cancel','snap-modal':'#snap-close','ai-panel':'#ai-panel [data-ai=close]','cmdk':'#cmdk [data-ck-close]','prog-modal':'#prog-modal [data-pg=close]','campus-modal':'#campus-modal [data-cg=close]','tpl-modal':'#tpl-modal [data-tp=close]','axes-modal':'#axes-x'};/* prog-modal: the Programme dialog added in 5.0.0 *//* cmdk: the command search added in 4.6.1 *//* ai-panel: the on-prem AI panel added in 4.6.1 */
 /* returns a description of the step taken, or null when there is nothing on screen to try */
 async function stepOut(pg,how){const su=pg.su;const s=await ev(pg,SCAN);const tap=async(sel,why)=>{await tapEl(pg,sel);return why};
   const homeView=su.three?'#v3d':'#v2d';

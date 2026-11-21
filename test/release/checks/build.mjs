@@ -16,7 +16,7 @@ export async function run(){
   R.push(row('b5','index.html is blank: no sample, no debug hook, no Master name',!/m-sample|osp-debug|loadSample|Master/.test(html)));
   R.push(row('b6','index.html references the hashed app and vendor files it ships',html.includes(app)&&vendor.every(f=>html.includes('vendor/'+f))));
   const kb=f=>fs.statSync(path.join(dep,f)).size/1024;const sizes={index:kb('index.html'),app:kb(app),three:kb('vendor/'+vendor.find(f=>/^three/.test(f)))};
-  R.push(row('b7','size budget: index ≤ 120 KB, app ≤ 480 KB, three ≤ 700 KB',sizes.index<=120&&sizes.app<=480&&sizes.three<=700,Object.fromEntries(Object.entries(sizes).map(([k,v])=>[k,Math.round(v)+' KB']))));
+  R.push(/* app budget: 480 → 520 KB on 11 Nov 2026 (the AI assistant), then 1 MB (1,024 KB) on 12 Nov 2026 (Programme, building generator, AI stacking advice). Both set by Jeff */row('b7','size budget: index ≤ 120 KB, app ≤ 1,024 KB, three ≤ 700 KB',sizes.index<=120&&sizes.app<=1024&&sizes.three<=700,Object.fromEntries(Object.entries(sizes).map(([k,v])=>[k,Math.round(v)+' KB']))));
   const dev=fs.readFileSync(path.join(OUT,`StoreyBook v${ver}.html`),'utf8');
   R.push(row('b8','single file keeps the watermark and the version',dev.includes('Designed by Jeff Ying, BI')&&dev.includes(`APP_VERSION='${ver}'`)));
   R.push(row('b9','single file starts with the doctype and charset',/^<!doctype html>/i.test(dev)&&dev.includes('charset="utf-8"')));

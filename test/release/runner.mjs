@@ -8,7 +8,7 @@
 */
 import fs from 'fs';import path from 'path';import {browser,appVersion,ROOT} from './lib.mjs';
 const args=process.argv.slice(2);const flag=f=>args.includes(f);const only=(args.find(a=>a.startsWith('--only='))||'').slice(7).split(',').filter(Boolean);
-const LAYERS=['build','load','golden','smoke','matrix','detect','visual','perf','deploy'];
+const LAYERS=['build','load','golden','smoke','rules','except','users','matrix','detect','visual','perf','deploy'];
 const ver=appVersion();console.log(`StoreyBook release gate · v${ver} · ${new Date().toISOString()}\n`);
 const known=(()=>{try{return JSON.parse(fs.readFileSync(path.join(ROOT,'test/release/known.json'),'utf8')).map(k=>Object.assign(k,{re:new RegExp(k.id)}))}catch(e){return[]}})();
 const knownOf=id=>known.find(k=>k.re.test(id));

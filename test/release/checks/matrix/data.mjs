@@ -54,11 +54,12 @@ async function drag(pg,a,b,steps=12){if(pg.phone){/* the first move follows the 
 const onPlan=(pg,x,y)=>ev(pg,([x,y])=>{const e=document.elementFromPoint(x,y);return !!e&&!!e.closest('#plan')},[x,y]);
 const visible=(pg,s)=>ev(pg,s=>{const e=document.querySelector(s);if(!e)return false;const r=e.getBoundingClientRect();return !e.hidden&&getComputedStyle(e).display!=='none'&&r.width>0&&r.height>0},s);
 /* the phone More sheet lists these; everything else is in the header menu (⋮), which phones show too */
-const MORE=['m-snaps','m-fire','m-plans','m-open','m-save','b-set','m-guide'];
+const MORE=['m-snaps','m-undp','m-fire','m-plans','m-open','m-save','b-set','m-guide'];
 async function menu(pg,id){
   if(pg.phone&&MORE.includes(id)){await press(pg,'#mbar [data-m=more]');if(!await waitF(pg,()=>!document.querySelector('#msheet').hidden,null,5000))throw new Error('More sheet did not open');await press(pg,`#msheet [data-pm="${id}"]`);return}
   await press(pg,'#b-more');if(!await waitF(pg,()=>!document.querySelector('#pop-more').hidden,null,5000))throw new Error('menu did not open');await press(pg,'#'+id)}
-async function tab(pg,k){const open=await ev(pg,()=>!document.querySelector('#d-insp').hidden);
+async function tab(pg,k){/* 5.0.0 test 29: Underlay is no longer a tab; it opens from the menu (phones: the More sheet) */if(k==='und'){if(await ev(pg,()=>!document.querySelector('#d-insp').hidden&&!document.querySelector('#p-und').hidden))return;await menu(pg,'m-undp');if(!await waitF(pg,()=>!document.querySelector('#d-insp').hidden&&!document.querySelector('#p-und').hidden,null,3000))throw new Error('Underlay panel did not open from the menu');return}
+  const open=await ev(pg,()=>!document.querySelector('#d-insp').hidden);
   if(!open){await press(pg,pg.phone?'#mbar [data-m=insp]':'#t-insp');if(!await waitF(pg,()=>!document.querySelector('#d-insp').hidden,null,2000))throw new Error('Details did not open')}
   await press(pg,'#tab-'+k);if(!await waitF(pg,k=>!document.querySelector('#p-'+k).hidden,k,2000))throw new Error('tab '+k+' did not show')}
 /* phones: the Details sheet covers the plan, so put it away before acting on the plan (pull handle tap) */
@@ -459,9 +460,9 @@ async function gLib(b,phone,add){const S=phone?'phone 2D':'desktop 2D',P=phone?'
       add(P+'lib-search',`${S}: typing "chair" in the library search shows exactly the matching items`,all===n0&&s.length===want&&want>0&&want<all&&s.every(l=>(l.name+' '+l.code+' '+l.cat).toLowerCase().includes('chair')),{all,shown:s.length,want})});
     /* mutation: app.js:907 renderLib `if(libCat!=='All'&&l.cat!==libCat)return;` → `if(0)return;` → FAIL confirmed */
     await T('lib-cat',`${S}: a category chip shows only that category; All shows everything`,async()=>{
-      await openLib();await clearQ();const q0=await ev(pg,()=>document.querySelector('#lib-q').value);const pc=await press(pg,'#lib-cats [data-cat="Storage"]');const on=await ev(pg,()=>(document.querySelector('#lib-cats .chip.on')||{}).textContent);const s=await shown();const want=await ev(pg,()=>window.__osp.LIB().filter(l=>l.cat==='Storage').length);
+      await openLib();await clearQ();const q0=await ev(pg,()=>document.querySelector('#lib-q').value);const pc=await press(pg,'#lib-cats [data-cat="Electrical"]');const on=await ev(pg,()=>(document.querySelector('#lib-cats .chip.on')||{}).textContent);const s=await shown();const wantCodes=await ev(pg,()=>window.__osp.LIB().filter(l=>window.__osp.libAt(l)[0]==='Electrical').map(l=>l.code));const want=wantCodes.length;
       await press(pg,'#lib-cats [data-cat="All"]');const a=await shown();
-      add(P+'lib-cat',`${S}: the Storage chip shows only the ${'Storage'} items; All shows the whole library again`,s.length===want&&want>0&&s.every(l=>l.cat==='Storage')&&a.length===n0,{storage:s.length,want,all:a.length,n0,q0,on,pc})});
+      /* 13 Nov 2026: the chips are disciplines now (library tree, Jeff's call), so this checks a discipline chip instead of the old Storage category chip */add(P+'lib-cat',`${S}: the Electrical discipline chip shows only the Electrical items; All shows the whole library again`,s.length===want&&want>0&&s.every(l=>wantCodes.includes(l.code))&&a.length===n0,{storage:s.length,want,all:a.length,n0,q0,on,pc})});
     /* mutation (desktop): app.js:920 lib-exp `libToCSV(LIB)` → `libToCSV(LIB.slice(1))` → FAIL confirmed. Phone: fails on the real build (finding: #d-lib .df is display:none on phones, head.html:362) — same for import and reset */
     await T('lib-export',`${S}: Export CSV saves the whole library`,async()=>{
       await openLib();const c0=await nCap(pg);await press(pg,'#lib-exp');const c=await capNext(pg,c0);if(!c)throw new Error('nothing was saved');csv=c.text;const rows=parseCSV(c.text).filter(r=>r.length>1||r[0]);
