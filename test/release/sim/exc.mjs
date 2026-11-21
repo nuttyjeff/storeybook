@@ -1,6 +1,6 @@
 /* exception handling: feed the app broken input and broken surroundings; record crashes, silent failures and corrupted state */
 import fs from 'fs';import http from 'http';
-import os from 'os';import path from 'path';import {browser,devFile} from '../lib.mjs';
+import os from 'os';import path from 'path';import {browser,devFile,ROOT} from '../lib.mjs';
 const APPURL=process.env.SIM_URL||devFile();const DIR=process.env.SIM_DIR||path.join(os.tmpdir(),'sb-sim');fs.mkdirSync(DIR,{recursive:true});
 const b=await browser();const F=[];let CUR='',SECS=[];const note=(area,name,sev,what)=>{F.push({sec:CUR,area,name,sev,what});console.log(`[${sev}] ${area} · ${name}: ${String(what).slice(0,300)}`)};
 async function page(opt={},init){const ctx=await b.newContext({viewport:{width:1400,height:900},...opt});if(init)await ctx.addInitScript(init);const pg=await ctx.newPage();pg.errs=[];pg.on('pageerror',e=>pg.errs.push(e.message.slice(0,200)));pg.on('console',m=>{if(m.type()==='error'&&!/Failed to load resource|net::ERR|CORS|Access-Control/.test(m.text()))pg.errs.push('console: '+m.text().slice(0,200))});pg.on('dialog',d=>d.accept());await pg.goto(APPURL);await pg.waitForFunction(()=>window.__osp);await pg.evaluate(()=>{window.__msgs=[];const t=document.querySelector('#toast');new MutationObserver(()=>{if(!t.hidden&&t.textContent&&window.__msgs[window.__msgs.length-1]!==t.textContent)window.__msgs.push(t.textContent)}).observe(t,{childList:true,characterData:true,subtree:true,attributes:true})});await pg.waitForTimeout(400);return pg}
@@ -56,7 +56,7 @@ await T('csv',async()=>{const pg=await page();const dir=DIR+'/files';fs.mkdirSyn
    if(Date.now()-t0>9000)note('library CSV',f,'SLOW',(Date.now()-t0)+' ms');
    console.log('   ',f,'→',r.n,JSON.stringify(r.msgs).slice(0,160));await pg.evaluate(()=>{document.querySelector('#lib-reset').click()});await pg.waitForTimeout(200)}
  /* spreadsheets */
- const good=fs.readFileSync('/home/claude/planner/test/release/fixtures/requirements-form.xlsx');
+ const good=fs.readFileSync(path.join(ROOT,'test/release/fixtures/requirements-form.xlsx'));
  const xl={'random-bytes.xlsx':Buffer.from(Array.from({length:3000},()=>Math.floor(Math.random()*256))),'truncated.xlsx':good.subarray(0,Math.floor(good.length/2)),'empty.xlsx':Buffer.alloc(0),'a-text-file.xlsx':Buffer.from('this is not a spreadsheet'),'a-plan.xlsx':Buffer.from('{"app":"layout-planner","objs":[]}'),'tail-cut.xlsx':good.subarray(0,good.length-300)};
  for(const [f,c] of Object.entries(xl)){fs.writeFileSync(dir+'/'+f,c);await pg.evaluate(()=>{(window.__msgs.push('\u0000'),window.__tl=window.__msgs.length)});const e0=pg.errs.length;const before=await pg.evaluate(()=>JSON.stringify(window.__osp.S().prog||null));
    await pg.setInputFiles('#prog-file',dir+'/'+f);await pg.waitForTimeout(700);const r=await pg.evaluate(()=>({msgs:window.__msgs.slice(window.__tl),prog:JSON.stringify(window.__osp.S().prog||null),dlg:!document.querySelector('#prog-modal').hidden}));
