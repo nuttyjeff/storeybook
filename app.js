@@ -3938,11 +3938,13 @@ function init3D(){
   /* render on demand: a frame is drawn when something changed (need), within 0.7 s of input, while walking or a door is moving,
      and once a second as a safety net. A still scene costs almost nothing. */
   T3.loop=()=>{if(!is3D){T3.raf=null;return}const now=performance.now();if(WALK.on)walkStep();else controls.update();const anim=doorsAnimate();
-    if(T3.lowDpr&&WALK.on&&T3.walkMoved&&now-T3.walkMoved>500&&!T3.orbiting){T3.lowDpr=false;renderer.setPixelRatio(fullDpr);T3.walkMoved=0}
+    if(T3.lowDpr&&WALK.on&&T3.walkMoved&&now-T3.walkMoved>500&&!T3.orbiting){T3.lowDpr=false;renderer.setPixelRatio(T3.slow?fullDpr*0.5:fullDpr);T3.walkMoved=0}
+    /* a big plan on slow graphics: the first frame is drawn at half sharpness and timed by how long the browser takes to come back for the next one. Fast graphics go straight to full sharpness (one soft frame, once); slow graphics stay at half, which draws about three times faster */
+    /* the browser asks for the second frame at once and only then waits for the graphics to catch up, so it is the wait before the third that tells */if(T3.probe===2){T3.probe=3;T3.need=true}else if(T3.probe===3){const gap=now-T3.lastRender;T3.probe=0;if(gap>350){T3.slow=true;if(!T3.slowTold){T3.slowTold=true;toast("Large plan: the 3D view is drawn less sharp and without shadows here to keep it moving")}}else{T3.fastOK=true;renderer.setPixelRatio(fullDpr);renderer.shadowMap.autoUpdate=true;T3.need=true}}
     /* in Walk mode the scene used to be redrawn every frame, standing still included, which kept the graphics card at full load. Now it is redrawn only while the view is changing (and once a second, as in orbit) */
     const cs=WALK.on?camera.position.x.toFixed(4)+','+camera.position.y.toFixed(4)+','+camera.position.z.toFixed(4)+','+camera.quaternion.x.toFixed(5)+','+camera.quaternion.y.toFixed(5)+','+camera.quaternion.w.toFixed(5):'';const walking=WALK.on&&cs!==T3.camSig;T3.camSig=cs;if(walking)T3.last=now;
     if(T3.orbiting||walking||anim||T3.need)drawNorth();
-    if(walking||T3.need||anim||now-T3.last<700||now-T3.lastRender>1000){if(renderer.getContext().isContextLost()){T3.lastRender=now}else{if(bldView)bldLabelsMove();renderer.render(scene,camera);T3.need=false;T3.lastRender=now}}
+    if(walking||T3.need||anim||now-T3.last<700||now-T3.lastRender>1000){if(renderer.getContext().isContextLost()){T3.lastRender=now}else{if(bldView)bldLabelsMove();renderer.render(scene,camera);T3.need=false;T3.lastRender=now;if(T3.probe===1)T3.probe=2}}
     T3.raf=requestAnimationFrame(T3.loop)};
   controls.addEventListener('change',()=>{T3.need=true;T3.last=performance.now()});
   /* orbiting at a lower pixel ratio on high-density screens; full quality returns when the hand lifts */
@@ -4239,6 +4241,7 @@ function build3D(tg,opts){/* while the browser has taken the graphics away nothi
   if(LY('ceil'))S.objs.filter(o=>o.t==='trunk'&&o.pts&&o.pts.length>=2).forEach(o=>{const top=ceilH-(o.drop||0),hh=Math.max(20,o.h||100),ww=Math.max(20,o.w||150),y=top-hh/2;const mtl=mat(o.col||(dark?'#8a9097':'#b4b9bd'),sel.has(o.id)?{emissive:accent,emissiveIntensity:0.4}:null);
     for(let i=0;i<o.pts.length-1;i++){const a=o.pts[i],bq=o.pts[i+1],L=Math.hypot(bq[0]-a[0],bq[1]-a[1]);if(L<1)continue;const bx=new THREE.Mesh(new THREE.BoxGeometry((L+ww)*s,hh*s,ww*s),mtl);bx.position.set((a[0]+bq[0])/2*s,y*s,(a[1]+bq[1])/2*s);bx.rotation.y=-Math.atan2(bq[1]-a[1],bq[0]-a[0]);bx.castShadow=true;if(!sub)bx.userData.id=o.id;group.add(bx)}});
   if(sub)return{cx,cy,B};
+  try{batchItems(group,THREE);if(T3.batched){if(!T3.slow&&!T3.fastOK&&!T3.probe&&!WALK.on){T3.probe=1;T3.renderer.setPixelRatio(T3.fullDpr*0.5);/* and without redrawing the shadows, which is a second pass over every triangle */T3.renderer.shadowMap.autoUpdate=false}}else if(T3.slow||T3.probe){T3.slow=false;T3.probe=0;T3.renderer.setPixelRatio(T3.fullDpr);T3.renderer.shadowMap.autoUpdate=true}}catch(e){console.warn(e)}
   if(WALK.on&&WALK.roof&&S.bld)buildRoofWalk(group,{s,mat,dark});
   const R=span*s*0.8;dir.position.set(cx*s+R*0.6,R*1.3,cy*s+R*0.9);dir.target.position.set(cx*s,0,cy*s);const sc=dir.shadow.camera;sc.left=-R;sc.right=R;sc.top=R;sc.bottom=-R;sc.near=0.1;sc.far=R*5;sc.updateProjectionMatrix();
   T3.center=[cx*s,cy*s];T3.span=span*s;
@@ -4286,6 +4289,23 @@ function buildRoofWalk(group,K){const{THREE}=T3,{s,mat,dark}=K,b=S.bld,li=b.leve
     const G=stairGeo(o,F);[rectP(-hw-t,-hd-t,hw+t,-hd),rectP(-hw-t,-hd,-hw,hd),rectP(hw,-hd,hw+t,hd),rectP(-hw,-hd,G.g0/2,hd),rectP(-hw,-hd,hw,-hd+G.Ld)].forEach(r=>T3.cols.push({poly:toW(o,r)}))});
   if(li>groundI(b))buildRoofSite(group,30-(st.ffl+F),{THREE,mat,s,dark});
   buildRoofFit(group,30,{THREE,mat,s,dark})}
+/* big plans: thousands of items mean tens of thousands of draw calls, and the frame rate goes with the number of calls, not the number of triangles.
+   Above BATCH_MIN meshes, the furniture that is not selected is drawn as one mesh per material. Each item keeps its own meshes, hidden, so a click
+   still finds the item and its painted face; a selected item is left out and drawn on its own, so it can be dragged and highlighted as before.
+   Doors, lifts and cameras keep their own meshes too (they move or are hidden on their own). */
+const BATCH_MIN=4000,BATCH_VERTS=1500000;
+function batchItems(group,THREE){T3.batched=0;const by=new Map();let n=0;
+  group.children.forEach(g=>{const id=g.userData.id;if(!g.isGroup||!id||!g.visible||sel.has(id)||T3.doorPiv[id]||T3.liftPiv[id])return;const o=byId(id);if(!o||o.t!=='item'||isOpening(o)||/^cctv/.test(o.shape||''))return;
+    g.children.forEach(m=>{if(!m.isMesh||!m.visible||m.children.length||m.renderOrder||Array.isArray(m.material)||!m.material||m.material.transparent||!m.geometry||!m.geometry.attributes.position||!m.geometry.attributes.normal)return;n++;if(!by.has(m.material))by.set(m.material,[]);by.get(m.material).push([g,m])})});
+  if(n<BATCH_MIN)return;const v=new THREE.Vector3(),M=new THREE.Matrix4(),nm=new THREE.Matrix3();
+  by.forEach((all,material)=>{if(all.length<2)return;const hasUv=all.every(x=>x[1].geometry.attributes.uv);if(material.map&&!hasUv)return;
+    /* in chunks, so one buffer never grows past what a phone will take */let i0=0;while(i0<all.length){let nv=0,ni=0,i1=i0;while(i1<all.length){const ge=all[i1][1].geometry,c=ge.attributes.position.count;if(i1>i0&&nv+c>BATCH_VERTS)break;nv+=c;ni+=ge.index?ge.index.count:c;i1++}
+      const pos=new Float32Array(nv*3),nor=new Float32Array(nv*3),uv=hasUv?new Float32Array(nv*2):null,idx=nv>65535?new Uint32Array(ni):new Uint16Array(ni);let vo=0,io=0;
+      for(let k=i0;k<i1;k++){const g=all[k][0],m=all[k][1];g.updateMatrix();m.updateMatrix();M.multiplyMatrices(g.matrix,m.matrix);nm.getNormalMatrix(M);const ge=m.geometry,Pa=ge.attributes.position,Na=ge.attributes.normal,Ua=ge.attributes.uv,c=Pa.count;
+        for(let i=0;i<c;i++){v.fromBufferAttribute(Pa,i).applyMatrix4(M);pos[(vo+i)*3]=v.x;pos[(vo+i)*3+1]=v.y;pos[(vo+i)*3+2]=v.z;v.fromBufferAttribute(Na,i).applyMatrix3(nm).normalize();nor[(vo+i)*3]=v.x;nor[(vo+i)*3+1]=v.y;nor[(vo+i)*3+2]=v.z;if(uv){uv[(vo+i)*2]=Ua.getX(i);uv[(vo+i)*2+1]=Ua.getY(i)}}
+        const cnt=ge.index?ge.index.count:c;if(ge.index){const ia=ge.index.array;for(let i=0;i<cnt;i++)idx[io+i]=ia[i]+vo}else{for(let i=0;i<cnt;i++)idx[io+i]=vo+i}vo+=c;io+=cnt;m.visible=false;T3.batched++}
+      const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.setAttribute('normal',new THREE.BufferAttribute(nor,3));if(uv)geo.setAttribute('uv',new THREE.BufferAttribute(uv,2));geo.setIndex(new THREE.BufferAttribute(idx,1));
+      const me=new THREE.Mesh(geo,material);me.castShadow=true;me.receiveShadow=true;me.userData.batch=true;/* clicks go to the item's own hidden meshes */me.raycast=()=>{};group.add(me);i0=i1}})}
 /* fewer draw calls: the plain meshes of one item, grouped by material, become a single mesh per material.
    Each piece's face id survives as an index range, so painting one piece still works (see fidAt). */
 function mergeItemGroup(g,THREE){const by=new Map();
