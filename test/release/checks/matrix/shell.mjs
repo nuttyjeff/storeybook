@@ -126,6 +126,7 @@ async function homeView(pg){await ev(pg,()=>document.querySelector('#z-fit').cli
     const k=Math.max(1,Math.ceil(Math.hypot(d[0],d[1])/140));const c=[195,400];
     for(let j=0;j<k;j++){const dx=d[0]/k,dy=d[1]/k,a=[c[0]-50-dx/2,c[1]-dy/2],b2=[c[0]+50-dx/2,c[1]-dy/2],n=8;await pg.fin.T('touchStart',[[a[0],a[1],1],[b2[0],b2[1],2]]);
       for(let i=1;i<=n;i++){await pg.fin.T('touchMove',[[a[0]+dx*i/n,a[1]+dy*i/n,1],[b2[0]+dx*i/n,b2[1]+dy*i/n,2]]);await sleep(16)}await pg.fin.T('touchEnd',[]);await sleep(60)}
+    /* the browser swallows a tap that lands just after a two-finger pan ends (it reads it as stopping the fling), so the first tap of the next check was lost now and then: walk-pick-p2, tool-room-p2, sheet-draw-p2 */await sleep(400);
     await pg.waitForFunction(()=>window.__osp.pointersN()===0,null,{timeout:4000}).catch(()=>{});
     /* the pan must leave empty ground on screen; if a stroke was lost, start over once */
     if(!pg.homeRetry&&!(await emptyPts(pg,1)).length){pg.homeRetry=true;try{return await homeView(pg)}finally{pg.homeRetry=false}}}
