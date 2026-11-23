@@ -3834,11 +3834,12 @@ svg.addEventListener('pointerdown',ev=>{if(tool!=='su-push'||ev.button!==0||spac
 /* Settings › Keys and tools: switch between StoreyBook's keys and SketchUp's */
 (()=>{const pop=$('#pop-set');if(!pop)return;const h=pop.querySelector('h3');const box=document.createElement('div');
   box.innerHTML='<div class="grp">Keys and tools</div><div class="set"><span>Key bindings</span><select id="s-keys" aria-label="Key bindings"><option value="su">SketchUp</option><option value="sb">StoreyBook</option></select></div><div class="set"><span>SketchUp keys and tools</span><button class="btn sm" type="button" id="s-keys-sheet">Show…</button></div>';
-  box.innerHTML+='<div class="grp">3D view</div><div class="set"><span>Smooth edges in 3D</span><label class="sw"><input type="checkbox" id="s-aa" aria-label="Smooth edges in 3D"><span></span></label></div>';
+  box.innerHTML+='<div class="grp">3D view</div><div class="set"><span>Smooth edges in 3D</span><label class="sw"><input type="checkbox" id="s-aa" aria-label="Smooth edges in 3D"><span></span></label></div><div class="grp">Help</div><div class="set"><span>Offer the tutorial on an empty plan</span><label class="sw"><input type="checkbox" id="s-tut" aria-label="Offer the tutorial on an empty plan"><span></span></label></div>';
   h.after(...box.childNodes);{const aa=$('#s-aa');aa.checked=!!P.aa3d;aa.title='Smoother edges, slower 3D. Off by default';
     /* the browser fixes edge smoothing when the 3D view is first made, so a change after that needs the page loaded again (every plan is autosaved) */
     aa.addEventListener('change',()=>{P.aa3d=aa.checked;savePrefs();if(!T3){toast(P.aa3d?'Smooth edges on':'Smooth edges off: 3D draws faster');return}if(confirm('Smooth edges '+(P.aa3d?'on':'off')+'.\n\nThe 3D view picks this up when the page loads. Reload now? Your plans are autosaved.'))location.reload();else toast('It takes effect the next time the page loads')})}
-  const sl=$('#s-keys');const sync=()=>{sl.value=suOn()?'su':'sb'};sync();
+  {const tt=$('#s-tut');tt.checked=P.tutCta!==false;tt.addEventListener('change',()=>{if(tt.checked)delete P.tutCta;else P.tutCta=false;savePrefs();tutCta();toast(tt.checked?'An empty plan offers the tutorial again':'The tutorial is still in the ⋮ menu')})}
+  const sl=$('#s-keys');const sync=()=>{sl.value=suOn()?'su':'sb';$('#s-tut').checked=P.tutCta!==false};sync();
   sl.addEventListener('change',()=>{P.suKeys=sl.value==='su';P.suWelcome=1;savePrefs();suCancelAll();suTips();updateHint();vcbSync();toast(P.suKeys?'SketchUp keys and tools: L walls, R rectangle, M move, Q rotate, E eraser, Space select':'StoreyBook keys: W walls, D room, M measure, R turns 90°, V select')});
   $('#s-keys-sheet').addEventListener('click',()=>suSheetOpen(false));
   new MutationObserver(()=>{if(!pop.hidden)sync()}).observe(pop,{attributes:true,attributeFilter:['hidden']})})();
