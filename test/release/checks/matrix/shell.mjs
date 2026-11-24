@@ -191,6 +191,7 @@ async function libRow(pg,re){const sel=await ev(pg,re=>{const r=[...document.que
 async function canvasPts(pg,n=2){if(await is3D(pg)){const c=await ev(pg,()=>{const r=document.querySelector('#v3c').getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2,r.width]});return [[c[0]-c[2]*0.12,c[1]+20],[c[0]+c[2]*0.08,c[1]+40],[c[0],c[1]+80]].slice(0,n)}return emptyPts(pg,n)}
 async function selectOne(pg){
   if(await is3D(pg)){const it=await item3D(pg);if(!it)throw new Error('no item on the 3D canvas');await pg.cvTap(it.x,it.y);await pg.waitForFunction(()=>window.__osp.sel().length>0,null,{timeout:3000}).catch(()=>{});return it}
+  /* SketchUp keys: two clicks on the same grouped item within the double-click time open the group (and empty the selection), so let the previous click age first */if(process.env.SB_SUKEYS)await sleep(450);
   const it=(await findItems(pg,1))[0];if(!it)throw new Error('no item on screen');await pg.cvTap(it.x,it.y);await pg.waitForFunction(()=>window.__osp.sel().length>0,null,{timeout:3000}).catch(()=>{});return it}
 async function ctxOn(pg,empty){
   let p;if(await is3D(pg)){p=empty?await empty3D(pg):await item3D(pg);if(p&&!Array.isArray(p))p=[p.x,p.y]}else{p=empty?(await emptyPts(pg,1))[0]:await findItems(pg,1).then(a=>a[0]&&[a[0].x,a[0].y])}
