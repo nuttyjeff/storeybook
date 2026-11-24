@@ -38,5 +38,10 @@ export const scr=(pg,wx,wy)=>pg.evaluate(([wx,wy])=>{const o=window.__osp,V=o.V,
 export const click=(pg,sel)=>pg.evaluate(s=>{const e=document.querySelector(s);if(!e)throw new Error('no element '+s);e.click()},sel);
 export const to3D=async pg=>{await click(pg,'#v3d');await pg.waitForFunction(()=>window.__osp.T3()&&window.__osp.T3().renderer,{timeout:30000});await pg.waitForTimeout(800)};
 export const to2D=async pg=>{await click(pg,'#v2d');await pg.waitForTimeout(200)};
+/* SketchUp keys (SB_SUKEYS=1): a check that presses a key whose meaning differs asks which set is on */
+export const SUKEYS=()=>!!process.env.SB_SUKEYS;
+/* a 90° turn the way a user makes one: R / Shift+R with StoreyBook keys. With SketchUp keys R draws a rectangle, so the Details panel's 90° buttons */
+export async function turn90(pg,ccw){if(!SUKEYS())return pg.keyboard.press(ccw?'Shift+R':'r');
+  await pg.evaluate(()=>{const o=window.__osp;if(!o.P().insp)document.querySelector('#t-insp').click()});const s=`#p-sel [data-act="${ccw?'ccw':'cw'}"]`;await pg.waitForSelector(s,{state:'visible',timeout:3000});await pg.click(s);await pg.mouse.move(5,5)}
 /* result row */
 export const row=(id,name,pass,detail='')=>{const r={id,name,pass:!!pass,detail:typeof detail==='string'?detail:JSON.stringify(detail)};if(!r.pass)shoot(r);return r};

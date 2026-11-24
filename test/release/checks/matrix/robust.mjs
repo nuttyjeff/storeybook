@@ -8,7 +8,7 @@
    5 undo     one undo and one redo per action type restore the exact JSON.
    The debug hook only reads state and sets up preconditions; the OS file / save dialogs are the only things stubbed. */
 import fs from 'fs';import path from 'path';
-import {devices,devFile,row,ROOT} from '../../lib.mjs';
+import {devices,devFile,row,ROOT,turn90} from '../../lib.mjs';
 export const name='matrix-robust';
 const ID='mx-rb-';
 const URL_=()=>process.env.SB_URL||devFile();
@@ -377,7 +377,7 @@ async function gPersist(b,add){const P=ID+'ps-';const pg=await openPage(b,'deskt
     const live=()=>ev(pg,()=>{const S=window.__osp.S();return JSON.stringify({o:S.objs,n:S.name,p:S.pins||[],no:S.notes||'',b:S.bld&&S.bld.levels.map(l=>[l.id,(l.fit||[]).length])})});
     const EDITS=[
       ['move','drag an item',async()=>{const it=await itemPt(pg,x=>!x.gid);await pg.mouse.move(it.x,it.y);await pg.mouse.down();for(let i=1;i<=6;i++)await pg.mouse.move(it.x+i*8,it.y+i*5);await pg.mouse.up()}],
-      ['rotate','R rotates the selection',async()=>{await pg.keyboard.press('r')}],
+      ['rotate','R rotates the selection',async()=>{await turn90(pg)}],
       ['dup','Ctrl+D duplicates',async()=>{await pg.keyboard.press('Control+d')}],
       ['del','Delete removes',async()=>{await pg.keyboard.press('Delete')}],
       ['name','rename the plan',async()=>{await typeInto(pg,'#pname','Autosave check')}],
@@ -458,7 +458,7 @@ async function gUndo(b,add){const P=ID+'un-';const pg=await openPage(b,'desktop'
     await C('pin','drop a review pin',async()=>{await dock(pg,'pin');await clickW(pg,28000,22000)});
     await C('place','place a library item',async()=>{if(await ev(pg,()=>document.querySelector('#d-lib').hidden))await press(pg,'#t-lib');const i=await ev(pg,()=>[...document.querySelectorAll('#lib-list .lib-row')].findIndex(r=>/task chair/i.test(r.textContent)));if(i<0)throw new Error('no Task chair row');await press(pg,'#lib-list .lib-row',i);await clickW(pg,23000,23000);await dock(pg,'select')});
     await C('move','drag an item',async()=>{const it=await itemPt(pg,x=>!x.gid&&!x.arr);await pg.mouse.move(it.x,it.y);await pg.mouse.down();for(let i=1;i<=6;i++)await pg.mouse.move(it.x+i*9,it.y+i*4);await pg.mouse.up()});
-    await C('rotate','rotate with R',async()=>{await selItem();await pg.keyboard.press('r')});
+    await C('rotate','rotate with R',async()=>{await selItem();await turn90(pg)});
     await C('dup','duplicate with Ctrl+D',async()=>{await selItem();await pg.keyboard.press('Control+d')});
     await C('delete','delete with the Delete key',async()=>{await selItem();await pg.keyboard.press('Delete')});
     await C('paint','paint a room floor',async()=>{await dock(pg,'paint');const p=await w2s(pg,16000,15000);await pg.mouse.click(p.x,p.y)});
