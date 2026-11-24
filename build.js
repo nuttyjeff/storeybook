@@ -5,6 +5,7 @@
 const fs=require('fs'),path=require('path'),crypto=require('crypto');
 const esbuild=require(fs.existsSync('/opt/npm-tools/node_modules/esbuild')?'/opt/npm-tools/node_modules/esbuild':'esbuild');
 const OUT=process.env.SB_OUT||(fs.existsSync('/mnt/user-data/outputs')?'/mnt/user-data/outputs':path.join(__dirname,'out'));
+fs.mkdirSync(OUT,{recursive:true});
 const head=fs.readFileSync('head.html','utf8'),lib=fs.readFileSync('lib.js','utf8'),app=fs.readFileSync('app.js','utf8');
 const ver=(app.match(/APP_VERSION='([0-9.]+)'/)||[])[1];if(!ver)throw new Error('no APP_VERSION');
 const inner=s=>s.replace(/^\s*<script>/,'').replace(/<\/script>\s*$/,'');
