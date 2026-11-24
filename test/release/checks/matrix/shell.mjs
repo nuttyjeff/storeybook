@@ -101,7 +101,7 @@ const nObjs=pg=>ev(pg,()=>window.__osp.S().objs.length);
 /* reset to a known start (debug hook; never the action under test) */
 async function hardReset(pg){
   const su=pg.su;
-  await ev(pg,()=>{const o=window.__osp,g=s=>document.querySelector(s);if(o.WALK.on)g('#b-walk').click();if(o.roofMode())o.switchFloor(o.S().bld.active);
+  await ev(pg,()=>{const o=window.__osp,g=s=>document.querySelector(s);if(o.suReset)o.suReset();if(o.WALK.on)g('#b-walk').click();if(o.roofMode())o.switchFloor(o.S().bld.active);
     document.querySelectorAll('.keys-modal,.cmdk').forEach(p=>p.hidden=true);if(!g('#multibar').hidden)g('#multi-done').click();
     if(!g('#msheet').hidden)g('[data-msheet-close]').click();if(o.SUN().on)g('#v3-sun').click();
     for(let i=0;i<6&&LIVE_ESC();i++)g('#esc').click();

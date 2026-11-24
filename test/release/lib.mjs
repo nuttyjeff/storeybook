@@ -40,8 +40,13 @@ export const to3D=async pg=>{await click(pg,'#v3d');await pg.waitForFunction(()=
 export const to2D=async pg=>{await click(pg,'#v2d');await pg.waitForTimeout(200)};
 /* SketchUp keys (SB_SUKEYS=1): a check that presses a key whose meaning differs asks which set is on */
 export const SUKEYS=()=>!!process.env.SB_SUKEYS;
-/* a 90° turn the way a user makes one: R / Shift+R with StoreyBook keys. With SketchUp keys R draws a rectangle, so the Details panel's 90° buttons */
+/* a 90° turn the way a user makes one. StoreyBook keys: R / Shift+R. SketchUp keys (R draws a rectangle there): on the plan, right-click an empty
+   spot and pick Rotate 90° from the menu (it keeps the selection and is offered for every kind of object); in 3D, the Details panel's 90° buttons */
 export async function turn90(pg,ccw){if(!SUKEYS())return pg.keyboard.press(ccw?'Shift+R':'r');
-  await pg.evaluate(()=>{const o=window.__osp;if(!o.P().insp)document.querySelector('#t-insp').click()});const s=`#p-sel [data-act="${ccw?'ccw':'cw'}"]`;await pg.waitForSelector(s,{state:'visible',timeout:3000});await pg.click(s);await pg.mouse.move(5,5)}
+  const p=await pg.evaluate(()=>{const v=document.querySelector('#v3');if(v&&!v.hidden)return null;const r=document.querySelector('#plan').getBoundingClientRect();
+    for(let y=r.top+30;y<r.bottom-30;y+=17)for(let x=r.left+30;x<r.right-30;x+=17){const t=document.elementFromPoint(x,y);if(t&&t.closest('#plan')&&!t.closest('[data-id],[data-pin],[data-vh],[data-bh],[data-roth],[data-aim]'))return[x,y]}return null});
+  if(p){await pg.mouse.click(p[0],p[1],{button:'right'});const s=`#ctxmenu [data-cm="${ccw?'rotccw':'rotcw'}"]`;await pg.waitForSelector(s,{state:'visible',timeout:3000});await pg.click(s);await pg.mouse.move(5,5);return}
+  await pg.evaluate(()=>{if(!window.__osp.P().insp)document.querySelector('#t-insp').click();if(document.querySelector('#p-sel').hidden)document.querySelector('#tab-sel').click()});
+  const s=`#p-sel [data-act="${ccw?'ccw':'cw'}"]`;await pg.waitForSelector(s,{state:'visible',timeout:3000});await pg.click(s);await pg.mouse.move(5,5)}
 /* result row */
 export const row=(id,name,pass,detail='')=>{const r={id,name,pass:!!pass,detail:typeof detail==='string'?detail:JSON.stringify(detail)};if(!r.pass)shoot(r);return r};
