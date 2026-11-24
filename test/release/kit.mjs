@@ -1,0 +1,70 @@
+/* StoreyBook test kit: one command after every build.
+     npm run kit            quick     about 5 min   build, load, old plan files, every feature, screenshots, speed, deploy
+     npm run kit:standard   standard  about 25 min  + rules, bad input, user journeys, detection, device checks with SketchUp keys on (desktop and iPad)
+     npm run kit:full       full      about 70 min  everything: device checks with both key sets on every device size. A release needs this
+   Extra words are passed to the runner: npm run kit -- --accept-visual (take the current screenshots as the new baseline, after looking at them).
+   Writes test/release/out/report.html (failures with a picture, the command to re-run each one, and whether it also failed last time)
+   and keeps the last 30 runs in test/release/out/kit-history.json. Exit code 0 only when nothing blocks. */
+import fs from 'fs';import path from 'path';import {spawn,execSync} from 'child_process';import {ROOT,appVersion} from './lib.mjs';
+const TIERS={
+  quick:{label:'Quick',when:'after every build',only:'build,load,golden,smoke,visual,perf,deploy'},
+  standard:{label:'Standard',when:'before pushing a feature',only:'build,load,golden,smoke,rules,except,users,detect,matrix-su,visual,perf,deploy',env:{MX_SU_FILES:'edit-create,tablet-desktop,views-building,shell,view3d'}},
+  full:{label:'Full',when:'before a release',only:'build,load,golden,smoke,rules,except,users,matrix,matrix-su,detect,visual,perf,deploy'}};
+const ALL=['build','load','golden','smoke','rules','except','users','matrix','matrix-su','detect','visual','perf','deploy'];
+const WHAT={build:'the app builds, for the single file and the website',load:'it opens with no errors, desktop and phone',golden:'plan files from every old version open and save unchanged',smoke:'one check for every feature that has shipped',rules:'rules that hold after every action (undo, save, no stray objects)',except:'broken files, bad CSVs, garbage AI answers, full storage',users:'five simulated people doing whole jobs',matrix:'every action on every device and view, StoreyBook keys',"matrix-su":'the device checks again with SketchUp keys on',detect:'floor plan detection on known drawings',visual:'screenshots against the accepted ones',perf:'speed against the recorded numbers',deploy:'the website folder works when served'};
+const tier=process.argv[2]&&TIERS[process.argv[2]]?process.argv[2]:'quick',T=TIERS[tier],pass=process.argv.slice(process.argv[2]&&TIERS[process.argv[2]]?3:2);
+const OUTD=path.join(ROOT,'test/release/out');fs.mkdirSync(OUTD,{recursive:true});
+console.log(`StoreyBook test kit · ${T.label} (${T.when})\n`);
+const t0=Date.now();
+const code=await new Promise(res=>{const c=spawn(process.execPath,[path.join(ROOT,'test/release/runner.mjs'),'--only='+T.only,...pass],{cwd:ROOT,stdio:'inherit',env:{...process.env,...(T.env||{})}});c.on('exit',x=>res(x==null?1:x))});
+let J=null;try{J=JSON.parse(fs.readFileSync(path.join(OUTD,'last.json'),'utf8'))}catch(e){}
+if(!J||new Date(J.at).getTime()<t0){console.log('\nThe runner left no result; no report written.');process.exit(code||1)}
+/* history: what failed last time */
+const HF=path.join(OUTD,'kit-history.json');let H=[];try{H=JSON.parse(fs.readFileSync(HF,'utf8'))}catch(e){}
+const prev=H[H.length-1]||null,prevFail=new Set(prev?prev.fails:[]);
+const rows=J.rows||[],fails=rows.filter(r=>!r.pass&&!r.known),flaky=rows.filter(r=>r.flaky),known=rows.filter(r=>!r.pass&&r.known);
+let commit='';try{commit=execSync('git rev-parse --short HEAD',{cwd:ROOT,stdio:['ignore','pipe','ignore']}).toString().trim();if(execSync('git status --porcelain -uno',{cwd:ROOT,stdio:['ignore','pipe','ignore']}).toString().trim())commit+=' + uncommitted changes'}catch(e){}
+H.push({at:J.at,tier,ok:J.ok,commit,checks:rows.length,fails:fails.map(r=>r.id),flaky:flaky.map(r=>r.id),sec:Math.round((Date.now()-t0)/1000)});fs.writeFileSync(HF,JSON.stringify(H.slice(-30),null,1));
+/* the command that runs one failing check again */
+const q=s=>`'${String(s).replace(/'/g,"'\\''")}'`,rx=s=>String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function repro(r){const su=/@su$/.test(r.id),id=r.id.replace(/@su$/,''),pre=su?'SB_SUKEYS=1 ':'';const run='node test/release/runner.mjs --only=build,';
+  if(r.layer==='matrix'||r.layer==='matrix-su'){const sl=r.slice||'';let env=`MX_FILES=${sl} `;
+    if(['shell','tablet-desktop','views-building'].includes(sl))env+=`SB_CHECK=${q('^'+rx(id)+'$')} `;
+    else if(sl==='layout'){const m=/^mx-ly-([a-z0-9]+)-(?:[pl]-)?(.*)$/.exec(id);if(m){const p=m[2].split('-'),scr=p.map((_,i)=>p.slice(0,i+1).join('-'));env+=`MX_LY_DEV=${q('^'+m[1]+'$')} MX_LY_SCR=${q('^('+scr.join('|')+')$')} `}}
+    return pre+env+run+'matrix'}
+  return run+r.layer}
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtS=s=>s>=90?Math.round(s/60)+' min':s+' s';
+const pretty=d=>{const s=String(d||'');try{const o=JSON.parse(s);return JSON.stringify(o,null,1).slice(0,2400)}catch(e){return s.slice(0,2400)}};
+const ran=new Set((J.layers||[]).map(l=>l.layer)),stat=Object.fromEntries((J.layers||[]).map(l=>[l.layer,l]));
+const verdict=J.ok?(tier==='full'?'RELEASE OK':'PASS'):'BLOCKED';
+const card=(r,i)=>`<article class="f"><header><span class="tag ${prevFail.has(r.id)?'old':'new'}">${prevFail.has(r.id)?'also failed last run':'new'}</span><b>${esc(r.name)}</b></header>
+<div class="meta"><code>${esc(r.id)}</code> · ${esc(r.layer)}${r.slice?' › '+esc(r.slice):''}</div>
+<div class="body">${r.shot&&fs.existsSync(path.join(OUTD,r.shot))?`<a href="${esc(r.shot)}" target="_blank"><img src="${esc(r.shot)}" alt="The page when this check failed" loading="lazy"></a>`:`<div class="noshot">${esc(r.shotNote||'No picture for this check')}</div>`}
+<div><div class="lab">What the check saw</div><pre>${esc(pretty(r.detail))}</pre><div class="lab">Run just this again</div><div class="cmd"><code id="c${i}">${esc(repro(r))}</code><button type="button" data-c="c${i}">Copy</button></div></div></div></article>`;
+const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Test kit report</title><style>
+:root{--bg:#f6f7f8;--panel:#fff;--fg:#1c2126;--muted:#5d6670;--line:#dfe2e6;--ok:#1f7a45;--bad:#b3261e;--warn:#9a6700;--accent:#1f3a5f}
+@media (prefers-color-scheme:dark){:root{--bg:#121417;--panel:#1b1e22;--fg:#e8eaed;--muted:#9aa3ad;--line:#2c3137;--ok:#5ec48a;--bad:#ff8a80;--warn:#e3b341;--accent:#8ab4f8}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}main{max-width:1100px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:20px;margin:0}h2{font-size:15px;margin:28px 0 10px}.sub{color:var(--muted);margin:4px 0 0}.top{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.verdict{font-weight:700;font-size:15px;padding:6px 14px;border-radius:8px;color:#fff;background:var(--ok)}.verdict.no{background:var(--bad)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:18px}.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px}.tile b{display:block;font-size:22px;font-variant-numeric:tabular-nums}.tile span{color:var(--muted);font-size:12.5px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}td,th{text-align:left;padding:7px 10px;border-top:1px solid var(--line);vertical-align:top}th{border-top:0;font-size:12px;color:var(--muted);font-weight:600}td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}tr.skip td{color:var(--muted)}.ok{color:var(--ok);font-weight:600}.bad{color:var(--bad);font-weight:600}.warn{color:var(--warn);font-weight:600}
+.f{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--bad);border-radius:10px;padding:12px 14px;margin:0 0 12px}.f header{display:flex;gap:8px;align-items:baseline}.meta{color:var(--muted);font-size:12.5px;margin:2px 0 10px}.tag{flex:none;font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px;border:1px solid}.tag.new{color:var(--bad)}.tag.old{color:var(--warn)}
+.body{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:14px}@media (max-width:760px){.body{grid-template-columns:minmax(0,1fr)}}img{width:100%;border:1px solid var(--line);border-radius:6px;display:block}.noshot{border:1px dashed var(--line);border-radius:6px;padding:20px;color:var(--muted);font-size:12.5px;text-align:center}
+.lab{font-size:12px;color:var(--muted);margin:0 0 3px}pre{margin:0 0 10px;padding:8px 10px;background:var(--bg);border:1px solid var(--line);border-radius:6px;white-space:pre-wrap;word-break:break-word;font-size:12px;max-height:260px;overflow:auto}
+.cmd{display:flex;gap:8px;align-items:flex-start}.cmd code{flex:1;font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;word-break:break-all}.cmd button{flex:none;font:inherit;font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+ul{margin:0;padding-left:18px}li{margin:2px 0}.howto{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;color:var(--muted)}.howto b{color:var(--fg)}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+</style></head><body><main>
+<div class="top"><span class="verdict${J.ok?'':' no'}">${verdict}</span><div><h1>StoreyBook ${esc(J.version)} · ${esc(T.label)} test kit</h1><p class="sub">${esc(new Date(J.at).toLocaleString('en-SG'))} · ${esc(commit||'commit unknown')} · took ${fmtS(Math.round((Date.now()-t0)/1000))} · ${esc(T.when)}${tier!=='full'?' · a release needs the Full kit':''}</p></div></div>
+<div class="tiles"><div class="tile"><b class="${fails.length?'bad':'ok'}">${fails.length}</b><span>failed (blocking)</span></div><div class="tile"><b>${rows.length-fails.length-known.length}</b><span>of ${rows.length} checks passed</span></div><div class="tile"><b class="${flaky.length?'warn':''}">${flaky.length}</b><span>flaky: failed, then passed on a second run</span></div><div class="tile"><b>${known.length}</b><span>known issues (in known.json)</span></div></div>
+<h2>Layers</h2><table><tr><th>Layer</th><th>What it checks</th><th>Result</th><th class="n">Checks</th><th class="n">Time</th></tr>
+${ALL.map(L=>{const s=stat[L];if(!s)return `<tr class="skip"><td>${esc(L)}</td><td>${esc(WHAT[L])}</td><td>not in this kit</td><td class="n">–</td><td class="n">–</td></tr>`;return `<tr><td>${esc(L)}</td><td>${esc(WHAT[L])}</td><td class="${s.fail?'bad':'ok'}">${s.fail?s.fail+' failed':'pass'}${s.flaky?` <span class="warn">· ${s.flaky} flaky</span>`:''}${s.known?` · ${s.known} known`:''}</td><td class="n">${s.checks}</td><td class="n">${fmtS(s.sec)}</td></tr>`}).join('')}</table>
+<h2>${fails.length?`Failures (${fails.length})`:'Failures'}</h2>${fails.length?fails.slice(0,150).map(card).join('')+(fails.length>150?`<p class="sub">…and ${fails.length-150} more in test/release/out/last.json</p>`:''):'<p class="sub">None.</p>'}
+${flaky.length?`<h2>Flaky (${flaky.length})</h2><p class="sub">These failed, then passed when run again. They do not block, but a check that keeps turning up here needs its timing fixed.</p><ul>${flaky.map(r=>`<li><code>${esc(r.id)}</code> ${esc(r.name)}</li>`).join('')}</ul>`:''}
+${known.length?`<h2>Known issues (${known.length})</h2><ul>${known.map(r=>`<li><code>${esc(r.id)}</code> backlog row ${esc(r.known)}: ${esc(r.name)}</li>`).join('')}</ul>`:''}
+<h2>Recent runs</h2><table><tr><th>When</th><th>Kit</th><th>Commit</th><th>Result</th><th class="n">Checks</th><th class="n">Time</th></tr>${H.slice(-8).reverse().map(h=>`<tr><td>${esc(new Date(h.at).toLocaleString('en-SG'))}</td><td>${esc(h.tier)}</td><td>${esc(h.commit)}</td><td class="${h.ok?'ok':'bad'}">${h.ok?'pass':h.fails.length+' failed'}${h.flaky&&h.flaky.length?` <span class="warn">· ${h.flaky.length} flaky</span>`:''}</td><td class="n">${h.checks}</td><td class="n">${fmtS(h.sec)}</td></tr>`).join('')}</table>
+<h2>What to do</h2><div class="howto"><b>Red:</b> open each failure above, fix it, and run the kit again. <b>A screenshot changed on purpose:</b> look at the picture in test/release/out, then run <code>npm run kit -- --accept-visual</code>. <b>A fixed bug:</b> add a check that fails before the fix. <b>Before a release:</b> <code>npm run kit:full</code> must say RELEASE OK. Pictures are of the page in use when the result was recorded; a few checks tidy up first, so a picture can show the state after the tidy-up.</div>
+</main><script>document.addEventListener('click',e=>{const b=e.target.closest('button[data-c]');if(!b)return;const t=document.getElementById(b.dataset.c).textContent;navigator.clipboard.writeText(t).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1200)}).catch(()=>{})})</script></body></html>`;
+const RP=path.join(OUTD,'report.html');fs.writeFileSync(RP,html);
+console.log(`\nTest kit (${T.label}): ${verdict} · ${fails.length} failed · ${flaky.length} flaky · ${fmtS(Math.round((Date.now()-t0)/1000))}\nReport: file://${RP}`);
+process.exit(code);
