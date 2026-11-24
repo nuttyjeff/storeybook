@@ -1,7 +1,7 @@
 /* StoreyBook test kit: one command after every build.
      npm run kit            quick     about 5 min   build, load, old plan files, every feature, screenshots, speed, deploy
      npm run kit:standard   standard  about 21 min  + rules, bad input, user journeys, detection, device checks with SketchUp keys on (desktop and iPad)
-     npm run kit:full       full      about 60 min  everything: device checks with both key sets on every device size. A release needs this
+     npm run kit:full       full      about 55 min  everything: device checks with both key sets on every device size. A release needs this
    Extra words are passed to the runner: npm run kit -- --accept-visual (take the current screenshots as the new baseline, after looking at them).
    Writes test/release/out/report.html (failures with a picture, the command to re-run each one, and whether it also failed last time)
    and keeps the last 30 runs in test/release/out/kit-history.json. Exit code 0 only when nothing blocks. */
@@ -9,7 +9,7 @@ import fs from 'fs';import path from 'path';import {spawn,execSync} from 'child_
 const TIERS={
   quick:{label:'Quick',when:'after every build (about 5 min)',only:'build,load,golden,smoke,visual,perf,deploy'},
   standard:{label:'Standard',when:'before pushing a feature (about 21 min)',only:'build,load,golden,smoke,rules,except,users,detect,matrix-su,visual,perf,deploy',/* desktop and iPad only: shell on desktop 2D (SB_SETUPS), tablet-desktop for iPad + Pencil; the Full kit runs every setup */env:{MX_SU_FILES:'edit-create,tablet-desktop,shell,view3d',SB_SETUPS:'d2'}},
-  full:{label:'Full',when:'before a release (about 60 min)',only:'build,load,golden,smoke,rules,except,users,matrix,matrix-su,detect,visual,perf,deploy'}};
+  full:{label:'Full',when:'before a release (about 55 min)',only:'build,load,golden,smoke,rules,except,users,matrix,matrix-su,detect,visual,perf,deploy'}};
 const ALL=['build','load','golden','smoke','rules','except','users','matrix','matrix-su','detect','visual','perf','deploy'];
 const WHAT={build:'the app builds, for the single file and the website',load:'it opens with no errors, desktop and phone',golden:'plan files from every old version open and save unchanged',smoke:'one check for every feature that has shipped',rules:'rules that hold after every action (undo, save, no stray objects)',except:'broken files, bad CSVs, garbage AI answers, full storage',users:'five simulated people doing whole jobs',matrix:'every action on every device and view, StoreyBook keys',"matrix-su":'the device checks again with SketchUp keys on',detect:'floor plan detection on known drawings',visual:'screenshots against the accepted ones',perf:'speed against the recorded numbers',deploy:'the website folder works when served'};
 const tier=process.argv[2]&&TIERS[process.argv[2]]?process.argv[2]:'quick',T=TIERS[tier],pass=process.argv.slice(process.argv[2]&&TIERS[process.argv[2]]?3:2);

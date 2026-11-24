@@ -6,7 +6,7 @@ One command after every build. It builds the app, runs the release gate at the s
 |---|---|---|---|
 | `npm run kit` | after every build | about 5 min | build, load, old plan files, every shipped feature, screenshots, speed, deploy |
 | `npm run kit:standard` | before pushing a feature | about 21 min | the above + rules, bad input, simulated users, detection, and the device checks with SketchUp keys on (desktop and iPad) |
-| `npm run kit:full` | before a release | about 60 min | everything: the device checks with StoreyBook keys and with SketchUp keys, on every device size |
+| `npm run kit:full` | before a release | about 55 min | everything: the device checks with StoreyBook keys and with SketchUp keys, on every device size |
 
 The times are printed in each report; `test/release/out/kit-history.json` keeps the last 30 runs.
 
