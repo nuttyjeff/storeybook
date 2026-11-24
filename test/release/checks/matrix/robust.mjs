@@ -94,10 +94,10 @@ const INV=()=>{const o=window.__osp,S=o.S(),out={};
   /* every open dialog / sheet has a way out the user can see and reach */
   const vis=e=>{if(!e||e.hidden)return false;const cs=getComputedStyle(e);if(cs.display==='none'||cs.visibility==='hidden')return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0};
   /* reachable: on screen and on top, or only covered by a popover menu, the toast or the command search, which an outside tap / a moment / Esc clears (Search opened over the AI panel covers its Close until Search is closed) */
-  const reach=e=>{if(!vis(e))return false;const r=e.getBoundingClientRect();const x=r.left+r.width/2,y=r.top+r.height/2;if(x<0||y<0||x>innerWidth||y>innerHeight)return false;const t=document.elementFromPoint(x,y);return !!t&&(t===e||e.contains(t)||!!t.closest('.pop,#toast,#cmdk'))};
+  const reach=e=>{if(!vis(e))return false;const r=e.getBoundingClientRect();const x=r.left+r.width/2,y=r.top+r.height/2;if(x<0||y<0||x>innerWidth||y>innerHeight)return false;const t=document.elementFromPoint(x,y);/* or covered by another open dialog stacked on top, which has its own way out (checked too): closing it uncovers this one */return !!t&&(t===e||e.contains(t)||!!t.closest('.pop,#toast,#cmdk')||(!!t.closest('.keys-modal')&&!t.closest('.keys-modal').contains(e)&&!t.closest('.keys-modal').hidden))};
   const stuck=[];
   document.querySelectorAll('.keys-modal').forEach(m=>{if(vis(m)&&![...m.querySelectorAll('[aria-label=Close],[data-pclose],[data-kclose],[data-gclose]')].some(reach))stuck.push('#'+m.id)});
-  const ms=document.querySelector('#msheet');if(vis(ms)&&![...ms.querySelectorAll('[data-msheet-close]')].some(reach))stuck.push('#msheet');
+  /* a sheet under an open dialog is reachable again once the dialog (which has its own way out, checked above) closes */const ms=document.querySelector('#msheet');if(vis(ms)&&![...ms.querySelectorAll('[data-msheet-close]')].some(reach)&&![...document.querySelectorAll('.keys-modal')].some(vis))stuck.push('#msheet');
   document.querySelectorAll('.pop').forEach(p=>{if(!vis(p))return;const r=p.getBoundingClientRect();if(r.right<4||r.bottom<4||r.left>innerWidth-4||r.top>innerHeight-4)stuck.push('#'+p.id+' off screen')});
   if(o.WALK.on&&!reach(document.querySelector('#v3-walk')))stuck.push('walk with no Exit walk');
   out.stuck=stuck;
@@ -112,7 +112,7 @@ const INV=()=>{const o=window.__osp,S=o.S(),out={};
     const esc=document.querySelector('#esc');if(!o.WALK.on&&on.length===1&&on[0].dataset.tool!=='select'&&esc&&esc.hidden)tl.push(`tool ${on[0].dataset.tool} live with no Done chip`)}
   out.tool=tl;return out};
 const INVK=['err','json','fin','dup','sel','stuck','tool'];
-const INVN={err:'no console or page error',json:'planJSON parses and migratePlan accepts it',fin:'no NaN or Infinity in any coordinate or size',dup:'every object id is unique',sel:'the selection only holds existing objects',
+const INVN={recover:'after every injected fault is switched off the app draws, saves and stores again',err:'no console or page error',json:'planJSON parses and migratePlan accepts it',fin:'no NaN or Infinity in any coordinate or size',dup:'every object id is unique',sel:'the selection only holds existing objects',
   stuck:'no dialog, sheet or menu is left open without a reachable way out',tool:'the tool state matches the UI (dock highlight, cursor, phone Draw slot and Done chip)',undo:'undo all returns the exact starting plan',redo:'redo all returns the exact end plan'};
 /* controls a user can see and reach now; only the session-destroying ones are left out */
 const CANDS=()=>{const vis=e=>{const r=e.getBoundingClientRect();if(r.width<4||r.height<4)return null;const cs=getComputedStyle(e);if(cs.visibility==='hidden'||cs.pointerEvents==='none')return null;
@@ -133,9 +133,32 @@ const CANVAS=(seedPts)=>{const is3=!document.querySelector('#v3').hidden;const h
 const FIELDV=['0','-5','1e9','abc','','12.5','-0','99999999','NaN','2500','.','-1e400','<b>x</b>','3000','45','1,5'];
 const KEYS=['v','h','d','w','u','m','t','p','r','R','x','s','c','q','l','i','f','+','-','2','Escape','Escape','Delete','Backspace','Enter','ArrowLeft','ArrowUp','PageUp','PageDown','?','5','0','Control+z','Control+y','Control+d','Control+a','Control+g','Control+Shift+G','Control+c','Control+v','Control+x','Control+s','Control+o'];
 
-async function fuzzOne(b,kind,seed,N,add){
-  const P=`${ID}fz-${kind}-`,S={desktop:'desktop',ipad:'iPad (Pencil + finger)',iphone:'iPhone'}[kind];const R=rng(seed),pick=a=>a[Math.floor(R()*a.length)];
-  const fail={};INVK.forEach(k=>fail[k]=null);let pg=null;const log=[];let step=0;
+/* ---- fault injection (chaos layer): things that go wrong around the app while someone uses it. Each fault is switched on for a few
+   random actions and then off again; while it is on, the app may report the problem (a console message is allowed) but must not throw,
+   corrupt the plan or get stuck, and once it is off it must work normally again. ---- */
+const FAULTS=[
+  {k:'storage-full',d:'browser storage refuses every write',on:pg=>ev(pg,()=>{const S=Storage.prototype;window.__fs=S.setItem;S.setItem=function(){throw new DOMException('The quota has been exceeded.','QuotaExceededError')}}),off:pg=>ev(pg,()=>{if(window.__fs){Storage.prototype.setItem=window.__fs;delete window.__fs}})},
+  {k:'plans-db-fails',d:'the browser database refuses every write (storage full or private mode)',on:pg=>ev(pg,()=>{const S=IDBObjectStore.prototype;window.__idb={put:S.put,add:S.add,del:S.delete};const no=function(){throw new DOMException('injected: the quota has been exceeded','QuotaExceededError')};S.put=no;S.add=no;S.delete=no}),off:pg=>ev(pg,()=>{const S=IDBObjectStore.prototype,o=window.__idb;if(o){S.put=o.put;S.add=o.add;S.delete=o.del;delete window.__idb}})},
+  {k:'network-down',d:'every network request fails (AI assistant, update check)',on:pg=>ev(pg,()=>{window.__ft=window.fetch;window.fetch=()=>Promise.reject(new TypeError('injected: network down'))}),off:pg=>ev(pg,()=>{if(window.__ft){window.fetch=window.__ft;delete window.__ft}})},
+  {k:'clipboard-denied',d:'the clipboard refuses reads and writes',on:pg=>ev(pg,()=>{const c=navigator.clipboard;if(!c)return;window.__cb={r:c.readText,w:c.writeText,ri:c.read,wi:c.write};const no=()=>Promise.reject(new DOMException('injected: denied','NotAllowedError'));c.readText=no;c.writeText=no;c.read=no;c.write=no}),off:pg=>ev(pg,()=>{const c=navigator.clipboard,o=window.__cb;if(c&&o){c.readText=o.r;c.writeText=o.w;c.read=o.ri;c.write=o.wi;delete window.__cb}})},
+  {k:'webgl-lost',d:'the 3D graphics context is lost, then restored',on:pg=>ev(pg,()=>{const T=window.__osp.T3();if(!T||!T.renderer)return 'no 3D yet';const x=T.renderer.getContext().getExtension('WEBGL_lose_context');if(!x)return 'no extension';window.__lc=x;x.loseContext()}),off:pg=>ev(pg,()=>{if(window.__lc){try{window.__lc.restoreContext()}catch(e){}delete window.__lc}})},
+  {k:'resize',d:'the window changes size in the middle of the work',on:async(pg,R)=>{pg.__vp=pg.viewportSize();const v=pg.__vp;await pg.setViewportSize({width:Math.max(320,Math.round(v.width*(0.55+R()*0.6))),height:Math.max(400,Math.round(v.height*(0.6+R()*0.5)))})},off:async pg=>{if(pg.__vp)await pg.setViewportSize(pg.__vp)}},
+  {k:'jank',d:'the page freezes for half a second',on:pg=>ev(pg,()=>{setTimeout(()=>{const t=performance.now();while(performance.now()-t<500){}},0)}),off:()=>{}},
+  {k:'hidden',d:'the tab is hidden and the page is put away (pagehide, visibilitychange, blur)',on:pg=>ev(pg,()=>{try{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>'hidden'})}catch(e){}document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('blur'));window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}))}),
+    off:pg=>ev(pg,()=>{try{delete document.hidden;delete document.visibilityState}catch(e){}document.dispatchEvent(new Event('visibilitychange'));window.dispatchEvent(new Event('focus'));window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}))})},
+  {k:'pointer-cancel',d:'the system cancels the pointer in the middle of a gesture',on:pg=>ev(pg,()=>{const t=document.querySelector('#v3')&&!document.querySelector('#v3').hidden?document.querySelector('#v3c'):document.querySelector('#plan');for(const id of [1,2,0])t.dispatchEvent(new PointerEvent('pointercancel',{bubbles:true,pointerId:id,pointerType:id?'touch':'mouse'}));t.dispatchEvent(new PointerEvent('lostpointercapture',{bubbles:true,pointerId:1}))}),off:()=>{}},
+  {k:'stuck-modifier',d:'a modifier key goes down and the window loses focus before it comes up',on:async(pg,R)=>{pg.__mod=['Shift','Control','Alt'][Math.floor(R()*3)];await pg.keyboard.down(pg.__mod);await ev(pg,()=>window.dispatchEvent(new Event('blur')))},off:async pg=>{if(pg.__mod){await pg.keyboard.up(pg.__mod);pg.__mod=null}}},
+  {k:'garbage-paste',d:'something odd is pasted (random text or a broken image)',on:(pg,R)=>ev(pg,r=>{const dt=new DataTransfer();if(r<0.5)dt.setData('text/plain',Array.from({length:40+Math.floor(r*400)},(_,i)=>String.fromCharCode(32+((i*7919+Math.floor(r*1e6))%5000))).join(''));else dt.items.add(new File([new Uint8Array(64).map((_,i)=>(i*37+Math.floor(r*255))&255)],'broken.png',{type:'image/png'}));document.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}))},R()),off:()=>{}},
+  {k:'garbage-drop',d:'a broken file is dropped on the plan',on:(pg,R)=>ev(pg,r=>{const ext=['json','png','csv','pdf','dxf','xlsx','txt'][Math.floor(r*7)];const bytes=new Uint8Array(200+Math.floor(r*3000)).map((_,i)=>(i*131+Math.floor(r*997))&255);const dt=new DataTransfer();dt.items.add(new File([bytes],'dropped.'+ext));const m=document.querySelector('#main');for(const t of ['dragenter','dragover','drop'])m.dispatchEvent(new DragEvent(t,{dataTransfer:dt,bubbles:true,cancelable:true,clientX:600,clientY:400}))},R()),off:()=>{}},
+  {k:'key-storm',d:'a burst of random keys and shortcuts',on:async(pg,R)=>{const K=['a','z','y','c','v','x','d','g','k','s','o','Delete','Enter','Escape','Tab','ArrowLeft','ArrowUp','PageUp','PageDown','F8','1','0','?','/'];const M=['','Control+','Shift+','Alt+','Control+Shift+'];for(let i=0;i<8;i++)await pg.keyboard.press(M[Math.floor(R()*M.length)]+K[Math.floor(R()*K.length)]).catch(()=>{})},off:()=>{}},
+  {k:'long-text',d:'a very long or strange text is typed into a field',on:async(pg,R)=>{const f=await ev(pg,()=>{const l=[...document.querySelectorAll('input[type=text],input:not([type]),input[type=number],input[type=search],textarea')].filter(e=>{const r=e.getBoundingClientRect();return r.width>8&&r.height>8&&!e.disabled&&!e.readOnly&&getComputedStyle(e).visibility!=='hidden'});if(!l.length)return null;const e=l[Math.floor(Math.random()*l.length)];e.focus();return e.id||e.name||e.tagName});if(!f)return 'no field';
+    const t=R()<0.5?'W'.repeat(4000):'‮\u0000<script>x</script>\u{1F3D7}'+'9'.repeat(400)+'e999';await pg.keyboard.insertText(t);await pg.keyboard.press('Enter').catch(()=>{});await ev(pg,()=>document.activeElement&&document.activeElement.blur&&document.activeElement.blur());return f},off:()=>{}}];
+/* after a fault is switched off: the app still draws, the plan still saves, storage takes writes again */
+const RECOVER=()=>{const o=window.__osp,bad=[];try{o.render()}catch(e){bad.push('render throws: '+e.message)}try{JSON.parse(o.planJSON())}catch(e){bad.push('plan does not save: '+e.message)}
+  try{localStorage.setItem('__chaos','1');localStorage.removeItem('__chaos')}catch(e){bad.push('storage still refuses')}const T=o.T3();if(T&&T.renderer&&!document.querySelector('#v3').hidden&&T.renderer.getContext().isContextLost())bad.push('3D context still lost');return bad};
+export async function fuzzOne(b,kind,seed,N,add,opt={}){
+  const P=opt.prefix||`${ID}fz-${kind}-`,S={desktop:'desktop',ipad:'iPad (Pencil + finger)',iphone:'iPhone'}[kind]+(opt.faults?' chaos':'');const KEYSET=opt.faults?INVK.concat(['recover']):INVK;let flt=null;const faultsHit=[];const R=rng(seed),pick=a=>a[Math.floor(R()*a.length)];
+  const fail={};KEYSET.forEach(k=>fail[k]=null);let pg=null;const log=[];let step=0;
   const note=(k,v)=>{if(!fail[k])fail[k]={step,last:log.slice(-4),v}};
   try{pg=await openPage(b,kind);pg.confirmYes=false;
     const tab0=await ev(pg,()=>window.__osp.curTab().id);const start=await canon(pg);const floor0=await ev(pg,()=>window.__osp.S().bld?window.__osp.S().bld.active:null);const n0=await ev(pg,()=>window.__osp.S().objs.length);
@@ -159,7 +182,9 @@ async function fuzzOne(b,kind,seed,N,add){
     /* 3D: on swiftshader every 3D frame is expensive, so each run makes a fixed number of 3D visits at seeded steps: switch with the
        2D/3D button, act there (orbit drags, taps, 3D bar controls), switch back. Walk and the building view are left to the 3D slices. */
     const V3=+(process.env.SB_FUZZ_3D||2),v3at=new Set(Array.from({length:V3},(_,i)=>Math.floor(N*(i+1)/(V3+1))));let in3=0;
-    for(step=1;step<=N;step++){let k=choose();if(v3at.has(step))k='view';if(in3&&await ev(pg,()=>document.querySelector('#v3').hidden))in3=0;if(in3){k=in3>=3?'view':pick(['drag','tap','ctl','pinch']);in3++}let d='';const e0=pg.errs.length;
+    for(step=1;step<=N;step++){
+      if(opt.faults&&!flt&&R()<opt.faults){const F=pick(FAULTS);let r;try{r=await F.on(pg,R)}catch(e){r='could not switch on: '+String(e.message||e).slice(0,60)}flt={F,until:step+Math.floor(R()*4),e0:pg.errs.length};faultsHit.push(F.k);log.push(step+':FAULT '+F.k+(r?' ('+r+')':''))}
+      let k=choose();if(v3at.has(step))k='view';if(in3&&await ev(pg,()=>document.querySelector('#v3').hidden))in3=0;if(in3){k=in3>=3?'view':pick(['drag','tap','ctl','pinch']);in3++}let d='';const e0=pg.errs.length;
       try{if(['tap','drag','long','pinch','dbl'].includes(k))d=await gesture(k);
         else if(k==='ctl')d=await control();
         else if(k==='tool')d=await control(c=>/data-tool=|data-m=|data-shape=|data-mt=|data-tool/.test(c.label)||/^\[tool/.test(c.label));
@@ -172,10 +197,12 @@ async function fuzzOne(b,kind,seed,N,add){
       }catch(e){d=k+' threw '+String(e.message||e).slice(0,80)}
       log.push(step+':'+d);await sleep(30);if(process.env.SB_DEBUG){/* trace for undo bugs: a step that changes the plan without growing the undo stack is the culprit */const c=await canon(pg).catch(()=>'');let h=0;for(let i=0;i<c.length;i++)h=(h*31+c.charCodeAt(i))|0;const st=await ev(pg,()=>{const o=window.__osp;return[o.past(),o.future(),o.curTab().id,o.S().objs.length,o.isDirty()?1:0]}).catch(()=>[]);console.error(kind,step,d,'| past',st[0],'fut',st[1],'tab',st[2],'n',st[3],'h',h)}
       let inv;try{inv=await ev(pg,INV)}catch(e){inv={json:'invariant eval threw '+String(e.message||e).slice(0,80)}}
-      if(pg.errs.length>e0)note('err',pg.errs.slice(e0,e0+2));
+      {/* the browser's own note that a server could not be reached (the AI assistant has none here) is not an app error */const ne=pg.errs.slice(e0).filter(x=>(!flt||/^PE:/.test(x))&&!/^Failed to load resource|net::ERR_/.test(x));if(ne.length)note('err',ne.slice(0,2))}
+      if(flt&&step>=flt.until){try{await flt.F.off(pg,R)}catch(e){}log.push(step+':fault off '+flt.F.k);await sleep(120);let bad;try{bad=await ev(pg,RECOVER)}catch(e){bad=['check threw '+String(e.message||e).slice(0,80)]}if(bad.length)note('recover',{fault:flt.F.k,bad});flt=null}
       if(inv.json)note('json',inv.json);for(const q of ['fin','dup','sel','stuck','tool'])if(inv[q]&&inv[q].length)note(q,inv[q]);}
     const end=await canon(pg);const nEnd=await ev(pg,()=>window.__osp.S().objs.length);
-    for(const k of INVK)add(P+k,`${S} fuzz: ${INVN[k]} after every one of ${N} random actions`,!fail[k],fail[k]?{seed,...fail[k]}:{seed,steps:N,objs:[n0,nEnd]});
+    if(flt){try{await flt.F.off(pg,R)}catch(e){}flt=null}
+    for(const k of KEYSET)add(P+k,`${S} fuzz: ${INVN[k]} after every one of ${N} random actions${opt.faults?' with faults injected':''}`,!fail[k],fail[k]?{seed,...fail[k],faults:faultsHit}:{seed,steps:N,objs:[n0,nEnd],faults:faultsHit});
     /* ---- undo everything, then redo everything, by the header buttons ---- */
     const tidy=async()=>{for(let i=0;i<4;i++){const st=await ev(pg,()=>({walk:window.__osp.WALK.on,is3:!document.querySelector('#v3').hidden,modal:[...document.querySelectorAll('.keys-modal')].some(m=>!m.hidden),sheet:!document.querySelector('#msheet').hidden}));
         if(st.walk){await press(pg,'#v3-walk').catch(()=>{});continue}

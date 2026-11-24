@@ -1,17 +1,20 @@
 /* StoreyBook test kit: one command after every build.
-     npm run kit            quick     about 5 min   build, load, old plan files, every feature, screenshots, speed, deploy
-     npm run kit:standard   standard  about 21 min  + rules, bad input, user journeys, detection, device checks with SketchUp keys on (desktop and iPad)
-     npm run kit:full       full      about 55 min  everything: device checks with both key sets on every device size. A release needs this
+     npm run kit            quick     about 9 min   build, load, old plan files, every feature, every function (commands, shortcuts in both key sets,
+                                                    right-click entries, settings), random input with injected faults on desktop, screenshots, speed, deploy
+     npm run kit:standard   standard  about 26 min  + rules, bad input, user journeys, detection, random input and faults on desktop and iPad,
+                                                    device checks with SketchUp keys on (desktop and iPad)
+     npm run kit:full       full      about 60 min  everything: device checks with both key sets on every device size, random input and faults on
+                                                    desktop, iPad and iPhone. A release needs this
    Extra words are passed to the runner: npm run kit -- --accept-visual (take the current screenshots as the new baseline, after looking at them).
    Writes test/release/out/report.html (failures with a picture, the command to re-run each one, and whether it also failed last time)
    and keeps the last 30 runs in test/release/out/kit-history.json. Exit code 0 only when nothing blocks. */
 import fs from 'fs';import path from 'path';import {spawn,execSync} from 'child_process';import {ROOT,appVersion} from './lib.mjs';
 const TIERS={
-  quick:{label:'Quick',when:'after every build (about 5 min)',only:'build,load,golden,smoke,visual,perf,deploy'},
-  standard:{label:'Standard',when:'before pushing a feature (about 21 min)',only:'build,load,golden,smoke,rules,except,users,detect,matrix-su,visual,perf,deploy',/* desktop and iPad only: shell on desktop 2D (SB_SETUPS), tablet-desktop for iPad + Pencil; the Full kit runs every setup */env:{MX_SU_FILES:'edit-create,tablet-desktop,shell,view3d',SB_SETUPS:'d2'}},
-  full:{label:'Full',when:'before a release (about 55 min)',only:'build,load,golden,smoke,rules,except,users,matrix,matrix-su,detect,visual,perf,deploy'}};
-const ALL=['build','load','golden','smoke','rules','except','users','matrix','matrix-su','detect','visual','perf','deploy'];
-const WHAT={build:'the app builds, for the single file and the website',load:'it opens with no errors, desktop and phone',golden:'plan files from every old version open and save unchanged',smoke:'one check for every feature that has shipped',rules:'rules that hold after every action (undo, save, no stray objects)',except:'broken files, bad CSVs, garbage AI answers, full storage',users:'five simulated people doing whole jobs',matrix:'every action on every device and view, StoreyBook keys',"matrix-su":'the device checks again with SketchUp keys on',detect:'floor plan detection on known drawings',visual:'screenshots against the accepted ones',perf:'speed against the recorded numbers',deploy:'the website folder works when served'};
+  quick:{label:'Quick',when:'after every build and on every push (about 9 min)',only:'build,load,golden,smoke,chaos,functions,visual,perf,deploy',env:{SB_CHAOS_DEV:'desktop',SB_CHAOS_N:'150'}},
+  standard:{label:'Standard',when:'before pushing a feature (about 26 min)',only:'build,load,golden,smoke,rules,except,users,chaos,functions,detect,matrix-su,visual,perf,deploy',/* desktop and iPad only: shell on desktop 2D (SB_SETUPS), tablet-desktop for iPad + Pencil; the Full kit runs every setup */env:{MX_SU_FILES:'edit-create,tablet-desktop,shell,view3d',SB_SETUPS:'d2',SB_CHAOS_DEV:'desktop,ipad',SB_CHAOS_N:'250'}},
+  full:{label:'Full',when:'before a release (about 60 min)',only:'build,load,golden,smoke,rules,except,users,chaos,functions,matrix,matrix-su,detect,visual,perf,deploy',env:{SB_CHAOS_DEV:'desktop,ipad,iphone',SB_CHAOS_N:'400'}}};
+const ALL=['build','load','golden','smoke','rules','except','users','chaos','functions','matrix','matrix-su','detect','visual','perf','deploy'];
+const WHAT={build:'the app builds, for the single file and the website',load:'it opens with no errors, desktop and phone',golden:'plan files from every old version open and save unchanged',smoke:'one check for every feature that has shipped',rules:'rules that hold after every action (undo, save, no stray objects)',except:'broken files, bad CSVs, garbage AI answers, full storage',users:'five simulated people doing whole jobs',chaos:'random real input with faults injected (storage full, network down, lost 3D, resizes, garbage pasted or dropped, key storms…), a new seed every run',functions:'every Search command, every shortcut in both key sets, every right-click entry, every Setting: each runs and does something',matrix:'every action on every device and view, StoreyBook keys',"matrix-su":'the device checks again with SketchUp keys on',detect:'floor plan detection on known drawings',visual:'screenshots against the accepted ones',perf:'speed against the recorded numbers',deploy:'the website folder works when served'};
 const tier=process.argv[2]&&TIERS[process.argv[2]]?process.argv[2]:'quick',T=TIERS[tier],pass=process.argv.slice(process.argv[2]&&TIERS[process.argv[2]]?3:2);
 const OUTD=path.join(ROOT,'test/release/out');fs.mkdirSync(OUTD,{recursive:true});
 console.log(`StoreyBook test kit · ${T.label} (${T.when})\n`);
@@ -32,11 +35,20 @@ function repro(r){const su=/@su$/.test(r.id),id=r.id.replace(/@su$/,''),pre=su?'
     if(['shell','tablet-desktop','views-building'].includes(sl))env+=`SB_CHECK=${q('^'+rx(id)+'$')} `;
     else if(sl==='layout'){const m=/^mx-ly-([a-z0-9]+)-(?:[pl]-)?(.*)$/.exec(id);if(m){const p=m[2].split('-'),scr=p.map((_,i)=>p.slice(0,i+1).join('-'));env+=`MX_LY_DEV=${q('^'+m[1]+'$')} MX_LY_SCR=${q('^('+scr.join('|')+')$')} `}}
     return pre+env+run+'matrix'}
+  if(r.layer==='chaos')return `SB_SEED=${r.seed} SB_CHAOS_DEV=${r.dev} SB_CHAOS_N=${(T.env||{}).SB_CHAOS_N||120} ${run}chaos`;
+  if(r.layer==='functions')return `SB_CHECK=${q('^'+rx(r.id)+'$')} ${run}functions`;
   return run+r.layer}
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmtS=s=>s>=90?Math.round(s/60)+' min':s+' s';
 const pretty=d=>{const s=String(d||'');try{const o=JSON.parse(s);return JSON.stringify(o,null,1).slice(0,2400)}catch(e){return s.slice(0,2400)}};
 const ran=new Set((J.layers||[]).map(l=>l.layer)),stat=Object.fromEntries((J.layers||[]).map(l=>[l.layer,l]));
+/* coverage: every function family, and every row of the core checklist, with the checks that cover it in this run */
+const cov=(()=>{const fam=[['Search commands',/^fn-cmd-/],['Shortcuts, StoreyBook keys',/^fn-key-sb-/],['Shortcuts, SketchUp keys',/^fn-key-su-/],['Right-click menu entries',/^fn-ctx-/],['Settings',/^fn-set-/],['Shipped features',/^s-/],['Library items placed',/^mx-ob-lib/],['Device and view checks, StoreyBook keys',/^mx-/,'matrix'],['Device and view checks, SketchUp keys',/@su$/],['Random input and faults',/^ch-/],['Old plan files',/^g\d|^golden/,'golden']];
+  const F=fam.map(([n,re,lay])=>{const l=rows.filter(r=>(lay?r.layer===lay:true)&&re.test(r.id));return {n,t:l.length,f:l.filter(r=>!r.pass&&!r.known).length}});
+  let map={};try{map=JSON.parse(fs.readFileSync(path.join(ROOT,'test/release/coverage.json'),'utf8'))}catch(e){}
+  let md='';try{md=fs.readFileSync(path.join(ROOT,'test/release/CORE-CHECKLIST.md'),'utf8')}catch(e){}
+  const ids=rows.map(r=>[r.id.replace(/@su$/,''),r]);const C=[...md.matchAll(/^\| ([A-I]\d+) \| ([^|]+)\|/gm)].map(m=>{const c=m[1],re=new RegExp('(^|-)'+c+'(-|$)'+(map[c]?'|'+map[c]:''),'i');const l=ids.filter(([i])=>re.test(i)).map(x=>x[1]);return {c,a:m[2].trim(),t:l.length,f:l.filter(r=>!r.pass&&!r.known).length}});
+  return {F,C}})();
 const verdict=J.ok?(tier==='full'?'RELEASE OK':'PASS'):'BLOCKED';
 const card=(r,i)=>`<article class="f"><header><span class="tag ${prevFail.has(r.id)?'old':'new'}">${prevFail.has(r.id)?'also failed last run':'new'}</span><b>${esc(r.name)}</b></header>
 <div class="meta"><code>${esc(r.id)}</code> · ${esc(r.layer)}${r.slice?' › '+esc(r.slice):''}</div>
@@ -62,6 +74,9 @@ ${ALL.map(L=>{const s=stat[L];if(!s)return `<tr class="skip"><td>${esc(L)}</td><
 <h2>${fails.length?`Failures (${fails.length})`:'Failures'}</h2>${fails.length?fails.slice(0,150).map(card).join('')+(fails.length>150?`<p class="sub">…and ${fails.length-150} more in test/release/out/last.json</p>`:''):'<p class="sub">None.</p>'}
 ${flaky.length?`<h2>Flaky (${flaky.length})</h2><p class="sub">These failed, then passed when run again. They do not block, but a check that keeps turning up here needs its timing fixed.</p><ul>${flaky.map(r=>`<li><code>${esc(r.id)}</code> ${esc(r.name)}</li>`).join('')}</ul>`:''}
 ${known.length?`<h2>Known issues (${known.length})</h2><ul>${known.map(r=>`<li><code>${esc(r.id)}</code> backlog row ${esc(r.known)}: ${esc(r.name)}</li>`).join('')}</ul>`:''}
+<h2>Coverage</h2><p class="sub">How many checks in this run cover each kind of function, and each row of the core checklist (test/release/CORE-CHECKLIST.md, matched through test/release/coverage.json).${tier!=='full'?' Rows marked “not in this kit” are covered by the Full kit.':''}</p>
+<table><tr><th>Functions</th><th class="n">Checks</th><th>Result</th></tr>${cov.F.map(f=>`<tr${f.t?'':' class="skip"'}><td>${esc(f.n)}</td><td class="n">${f.t||'–'}</td><td class="${f.f?'bad':f.t?'ok':''}">${f.t?(f.f?f.f+' failed':'pass'):'not in this kit'}</td></tr>`).join('')}</table>
+<details style="margin-top:10px"><summary>Core checklist: ${cov.C.filter(c=>c.t).length} of ${cov.C.length} rows have a check in this run${cov.C.some(c=>c.f)?` · <span class="bad">${cov.C.filter(c=>c.f).length} with failures</span>`:''}</summary><table style="margin-top:8px"><tr><th>Row</th><th>Action</th><th class="n">Checks</th><th>Result</th></tr>${cov.C.map(c=>`<tr${c.t?'':' class="skip"'}><td>${esc(c.c)}</td><td>${esc(c.a)}</td><td class="n">${c.t||'–'}</td><td class="${c.f?'bad':c.t?'ok':''}">${c.t?(c.f?c.f+' failed':'pass'):(tier==='full'?'<span class="bad">no check</span>':'not in this kit')}</td></tr>`).join('')}</table></details>
 <h2>Recent runs</h2><table><tr><th>When</th><th>Kit</th><th>Commit</th><th>Result</th><th class="n">Checks</th><th class="n">Time</th></tr>${H.slice(-8).reverse().map(h=>`<tr><td>${esc(new Date(h.at).toLocaleString('en-SG'))}</td><td>${esc(h.tier)}</td><td>${esc(h.commit)}</td><td class="${h.ok?'ok':'bad'}">${h.ok?'pass':h.fails.length+' failed'}${h.flaky&&h.flaky.length?` <span class="warn">· ${h.flaky.length} flaky</span>`:''}</td><td class="n">${h.checks}</td><td class="n">${fmtS(h.sec)}</td></tr>`).join('')}</table>
 <h2>What to do</h2><div class="howto"><b>Red:</b> open each failure above, fix it, and run the kit again. <b>A screenshot changed on purpose:</b> look at the picture in test/release/out, then run <code>npm run kit -- --accept-visual</code>. <b>A fixed bug:</b> add a check that fails before the fix. <b>Before a release:</b> <code>npm run kit:full</code> must say RELEASE OK. Pictures are of the page in use when the result was recorded; a few checks tidy up first, so a picture can show the state after the tidy-up.</div>
 </main><script>document.addEventListener('click',e=>{const b=e.target.closest('button[data-c]');if(!b)return;const t=document.getElementById(b.dataset.c).textContent;navigator.clipboard.writeText(t).then(()=>{b.textContent='Copied';setTimeout(()=>b.textContent='Copy',1200)}).catch(()=>{})})</script></body></html>`;

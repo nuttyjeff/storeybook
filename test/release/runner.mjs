@@ -13,11 +13,12 @@
 */
 import fs from 'fs';import path from 'path';import {browser,appVersion,ROOT,flushShots,SHOT_DIR} from './lib.mjs';
 const args=process.argv.slice(2);const flag=f=>args.includes(f);/* the last --only wins, so the kit's own list can be narrowed: npm run kit -- --only=build,smoke */const only=(args.filter(a=>a.startsWith('--only=')).pop()||'').slice(7).split(',').filter(Boolean);
-const LAYERS=['build','load','golden','smoke','rules','except','users','matrix','matrix-su','detect','visual','perf','deploy'];
+const LAYERS=['build','load','golden','smoke','rules','except','users','chaos','functions','matrix','matrix-su','detect','visual','perf','deploy'];
 /* layers that run the whole matrix list unless --only names them */const OPT_IN=['matrix-su'];
 /* the SketchUp-keys pass: every slice where keys, snapping, selection or the new tools can differ. Not phone2d (phone only) or layout (geometry) */
 const SU_DEFAULT='edit-create,tablet-desktop,views-building,shell,view3d,data,objects,robust';
-const RETRY=new Set(['load','golden','smoke','rules','except','users','detect','visual','perf']);
+const RETRY=new Set(['load','golden','smoke','rules','except','users','chaos','functions','detect','visual','perf']);
+/* layers that can run single checks again (SB_CHECK): only the failed ones are re-run */const SINGLE=new Set(['functions']);
 const ver=appVersion();console.log(`StoreyBook release gate · v${ver} · ${new Date().toISOString()}\n`);
 const known=(()=>{try{return JSON.parse(fs.readFileSync(path.join(ROOT,'test/release/known.json'),'utf8')).map(k=>Object.assign(k,{re:new RegExp(k.id)}))}catch(e){return[]}})();
 const knownOf=id=>known.find(k=>k.re.test(id));
@@ -38,7 +39,8 @@ for(const L of LAYERS){
   /* one more run for a layer that failed: a check that passes the second time was a timing fluke, not a bug */
   const bad=rows.filter(r=>!r.pass&&!knownOf(r.id));
   if(bad.length&&RETRY.has(L)&&!process.env.SB_NORETRY&&!accept){console.log(`  … ${L}: ${bad.length} failed, running the layer once more to tell bugs from timing flukes`);
-    const again=new Map((await runLayer(L,false,true)).map(r=>[r.id,r]));
+    const kc=process.env.SB_CHECK;if(SINGLE.has(L))process.env.SB_CHECK='^('+bad.map(r=>r.id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')$';
+    let again;try{again=new Map((await runLayer(L,false,true)).map(r=>[r.id,r]))}finally{if(kc==null)delete process.env.SB_CHECK;else process.env.SB_CHECK=kc}
     rows=rows.map(r=>{const a=again.get(r.id);return !r.pass&&a&&a.pass?{...a,detail:'FLAKY (failed, then passed on a second run): '+String(r.detail||'').slice(0,300)}:r})}
   rows.forEach(r=>{if(r.pass&&/^FLAKY/.test(String(r.detail||'')))r.flaky=true;const k=knownOf(r.id);if(k){r.known=k.row;if(r.pass)fixedKnown.push(r.id)}});
   const fails=rows.filter(r=>!r.pass&&!r.known),kn=rows.filter(r=>!r.pass&&r.known),fl=rows.filter(r=>r.flaky);all.push(...rows.map(r=>({layer:L,...r})));
