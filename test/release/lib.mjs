@@ -3,7 +3,9 @@ import { createRequire } from 'module'; import fs from 'fs'; import path from 'p
 /* paths: this machine's defaults, or SB_ROOT / SB_OUT / SB_TOOLS (CI sets them; the repo's own node_modules when /opt/npm-tools is absent) */
 export const ROOT=process.env.SB_ROOT||path.resolve(path.dirname(new URL(import.meta.url).pathname),'../..');
 export const TOOLS=process.env.SB_TOOLS||(fs.existsSync('/opt/npm-tools/node_modules')?'/opt/npm-tools/':ROOT+'/');
-const require=createRequire(TOOLS); export const { chromium, devices } = require('playwright');
+/* SB_ENGINE=webkit runs the same checks in Safari's engine (GitHub only: this container has Chromium alone) */
+export const ENGINE=process.env.SB_ENGINE||'chromium';
+const require=createRequire(TOOLS);const PW=require('playwright');export const { devices } = PW;export const chromium=PW[ENGINE];
 export const OUT=process.env.SB_OUT||(fs.existsSync('/mnt/user-data/outputs')?'/mnt/user-data/outputs':path.join(ROOT,'out'));
 export const appVersion=()=>(fs.readFileSync(path.join(ROOT,'app.js'),'utf8').match(/APP_VERSION='([0-9.]+)'/)||[])[1];
 /* SB_SUKEYS=1 opens the app with SketchUp keys on (#osp-debug-su); otherwise StoreyBook keys, as before */
@@ -14,7 +16,7 @@ const PAGES=new Set();const SHOTS=[];let shotN=0;
 export const SHOT_DIR=path.join(ROOT,'test/release/out/shots');
 function watch(p){p.__act=0;PAGES.add(p);p.on('close',()=>PAGES.delete(p));const mark=(o,ms)=>{for(const m of ms){const f=o&&o[m];if(typeof f==='function')o[m]=function(...a){p.__act=Date.now();return f.apply(this,a)}}};
   mark(p,['evaluate','waitForFunction','goto','click','tap','fill','dblclick','hover','waitForTimeout']);mark(p.mouse,['click','dblclick','down','up','move','wheel']);mark(p.keyboard,['press','type','down','up']);mark(p.touchscreen,['tap']);return p}
-export async function browser(){const b=await chromium.launch({args:GL});
+export async function browser(){const b=await PW[ENGINE].launch(ENGINE==='chromium'?{args:GL}:{});
   const wctx=c=>{const np=c.newPage.bind(c);c.newPage=async(...a)=>watch(await np(...a));return c};
   const nc=b.newContext.bind(b);b.newContext=async(...a)=>wctx(await nc(...a));const bp=b.newPage.bind(b);b.newPage=async(...a)=>watch(await bp(...a));return b}
 /* a picture of the one page used in the last 3 s. When several pages were busy at once (slices that run devices side by side) no picture is taken
@@ -31,7 +33,12 @@ export async function openApp(b,{phone=false,url=devFile(),sample=true}={}){
   await pg.goto(url,{waitUntil:'load'});await pg.waitForFunction(()=>window.__osp&&window.__osp.S,{timeout:20000});
   if(sample){await pg.evaluate(()=>{const b=document.querySelector('#m-sample');if(b)b.click()});await pg.waitForTimeout(400)}
   pg.ctx=ctx;return pg}
-export async function touch(pg){const cdp=await pg.ctx.newCDPSession(pg);const T=(type,pts)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:pts.map(p=>Object.assign({x:p[0],y:p[1]},p.length>2?{id:p[2]}:{}))});
+/* fingers: Chrome's own touch input; in Safari's engine (no such channel) touch and pointer events are sent to the element under each finger */
+const SYNTH=([type,pts,prev])=>{const kind={touchStart:'start',touchMove:'move',touchEnd:'end',touchCancel:'cancel'}[type];const list=kind==='end'||kind==='cancel'?prev:pts;
+  for(const [i,p] of list.entries()){const x=p[0],y=p[1],id=(p.length>2?p[2]:i)+1;const t=document.elementFromPoint(x,y)||document.body;const o={bubbles:true,cancelable:true,composed:true,pointerId:id,pointerType:'touch',isPrimary:i===0,clientX:x,clientY:y,button:kind==='move'?-1:0,buttons:kind==='end'||kind==='cancel'?0:1};
+    t.dispatchEvent(new PointerEvent({start:'pointerdown',move:'pointermove',end:'pointerup',cancel:'pointercancel'}[kind],o));if(kind==='end'){t.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:x,clientY:y}))}}};
+export async function touch(pg){let T;if(ENGINE==='chromium'){const cdp=await pg.ctx.newCDPSession(pg);T=(type,pts)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:pts.map(p=>Object.assign({x:p[0],y:p[1]},p.length>2?{id:p[2]}:{}))})}
+  else{let prev=[];T=async(type,pts)=>{await pg.evaluate(SYNTH,[type,pts,prev]);prev=type==='touchEnd'||type==='touchCancel'?[]:pts}}
   return {T,tap:async(x,y)=>{await T('touchStart',[[x,y]]);await T('touchEnd',[])},drag:async(a,b,n=12)=>{await T('touchStart',[a]);for(let i=1;i<=n;i++){await T('touchMove',[[a[0]+(b[0]-a[0])*i/n,a[1]+(b[1]-a[1])*i/n]]);await pg.waitForTimeout(16)}await T('touchEnd',[])}}}
 /* world -> screen */
 export const scr=(pg,wx,wy)=>pg.evaluate(([wx,wy])=>{const o=window.__osp,V=o.V,r=document.querySelector('#plan').getBoundingClientRect();return [r.left+(wx-V.x)*V.k,r.top+(wy-V.y)*V.k]},[wx,wy]);

@@ -1,9 +1,15 @@
 name: Test kit
 
-# Every push runs the Quick kit: build, load, old plan files, every shipped feature, every function (Search commands,
-# shortcuts in both key sets, right-click entries, settings), random input with injected faults, screenshots, speed, deploy.
-# The report page, failure pictures and last.json are attached to the run as the "kit-report" artifact.
-# From the Actions tab the Standard or Full kit can be run on one machine; the release gate (gate.yml) runs the full gate split across machines.
+# Every push runs two jobs side by side:
+#   kit     the Quick kit in Chromium: build, load, old plan files, every shipped feature, every function (Search commands, shortcuts in
+#           both key sets, right-click entries, settings), random input with injected faults, screenshots, speed, deploy
+#   safari  the same feature, function and random-input checks in Safari's engine (WebKit), as iPad users run the app
+# Each attaches its report page, failure pictures and last.json (kit-report, kit-report-safari).
+#
+# From the Actions tab (Run workflow):
+#   kit                   run the Standard or Full kit instead of the Quick one
+#   accept_screenshots    take this run's screenshots as the accepted ones for GitHub (look at them in a report first). They are committed
+#                         to the branch as test/release/baseline-ci; from then on every run compares against them.
 on:
   push:
   workflow_dispatch:
@@ -13,6 +19,10 @@ on:
         type: choice
         options: [quick, standard, full]
         default: quick
+      accept_screenshots:
+        description: Accept this run's screenshots as the GitHub baseline (commits test/release/baseline-ci)
+        type: boolean
+        default: false
 
 concurrency:
   group: kit-${{ github.ref }}
@@ -22,8 +32,10 @@ jobs:
   kit:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: write
     env:
-      # screenshots made on GitHub differ from local ones (fonts); they are compared with their own baseline, kept in the artifact
+      # screenshots made on GitHub differ from local ones (fonts), so they have their own accepted set
       SB_BASELINE: test/release/baseline-ci
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +44,16 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
+      - name: Accept this run's screenshots
+        if: ${{ inputs.accept_screenshots }}
+        run: |
+          rm -rf test/release/baseline-ci
+          node test/release/runner.mjs --only=build,visual --accept-visual
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add test/release/baseline-ci
+          git commit -m "Accept the GitHub screenshots as the baseline (test/release/baseline-ci)" || echo "No change to commit"
+          git push
       - name: Run the ${{ inputs.kit || 'quick' }} kit
         run: node test/release/kit.mjs ${{ inputs.kit || 'quick' }}
       - name: Summary
@@ -41,6 +63,7 @@ jobs:
           cp test/release/out/last.json results/result-${{ inputs.kit || 'quick' }}-kit/ 2>/dev/null || true
           node test/release/ci-summary.mjs results >> "$GITHUB_STEP_SUMMARY" || true
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ ! -d test/release/baseline-ci ] || [ -z "$(git ls-files test/release/baseline-ci)" ]; then echo "Screenshots are not compared on GitHub yet: no accepted set. Look at them in the report, then Run workflow with accept_screenshots." >> "$GITHUB_STEP_SUMMARY"; fi
           echo "The full report (report.html, with a picture of each failure) is in the kit-report artifact." >> "$GITHUB_STEP_SUMMARY"
       - if: always()
         uses: actions/upload-artifact@v4
@@ -49,4 +72,29 @@ jobs:
           path: |
             test/release/out/
             test/release/baseline-ci/
+          if-no-files-found: ignore
+
+  safari:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps webkit
+      - name: Run the kit in Safari's engine
+        run: node test/release/kit.mjs safari
+      - name: Summary
+        if: always()
+        run: |
+          mkdir -p results/result-safari
+          cp test/release/out/last.json results/result-safari/ 2>/dev/null || true
+          node test/release/ci-summary.mjs results >> "$GITHUB_STEP_SUMMARY" || true
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kit-report-safari
+          path: test/release/out/
           if-no-files-found: ignore
