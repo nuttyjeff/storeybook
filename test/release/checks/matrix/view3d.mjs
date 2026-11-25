@@ -127,7 +127,7 @@ async function suite(b,phone){
       await T.T('touchStart',[[pa[0],pa[1]]]);await pg.waitForTimeout(900);await T.T('touchEnd',[]);await pg.waitForTimeout(250);
       const menu=await ev(pg,()=>{const m=document.querySelector('#ctxmenu');return {shown:!!m&&!m.hidden,items:m?[...m.querySelectorAll('[data-cm]')].map(x=>x.dataset.cm):[]}});
       if(!menu.shown||!menu.items.includes('multi'))return {pass:false,detail:{menu,contextmenuEventFired:await ev(pg,()=>window.__cm),note:'long-press on an item in 3D did not open a menu with Select several (the 2D plan uses its own pointer timer so it works on iOS; 3D relies on the browser contextmenu event)'}};
-      await ev(pg,()=>document.querySelector('#ctxmenu [data-cm=multi]').click());await pg.waitForTimeout(150);await tap(pb[0],pb[1]);const s=await sel(pg);
+      await ev(pg,()=>document.querySelector('#ctxmenu [data-cm=multi]').click());await pg.waitForTimeout(150);/* where B is now: on a slower machine the camera may still be settling from the long-press */const pb2=await ptOf(B);await tap(pb2[0],pb2[1]);const s=await sel(pg);
       await press('#mbar [data-m=select]');const multiOff=await ev(pg,()=>document.querySelector('#multibar').hidden);
       return {pass:s.includes(A)&&s.includes(B)&&multiOff,detail:{n:s.length,hasA:s.includes(A),hasB:s.includes(B),multiOff}}});
     await ev(pg,()=>{window.__osp.setSel([])});

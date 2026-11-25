@@ -6,6 +6,8 @@ const uid=()=>Math.random().toString(36).slice(2,10);
 const clone=o=>JSON.parse(JSON.stringify(o));
 /* the release gate opens the app with #osp-debug (StoreyBook keys) or #osp-debug-su (SketchUp keys); either way no welcome card or tutorial offer pops up */
 const TESTHOOK=/-debug(-su)?$/.test(location.hash);
+/* pointer capture can fail when the finger or pen has already lifted (a slow frame on an iPad, say); the gesture simply goes on without it */
+const capPtr=(el,id)=>{try{el.setPointerCapture(id)}catch(e){}};
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const num=(v,d)=>{const n=parseFloat(v);return isFinite(n)?n:(d===undefined?0:d)};
 const r1=v=>Math.round(v);
@@ -485,7 +487,9 @@ function dockClear(){const d=$('.dock'),m=$('#main');if(!d||!m)return;const r=d.
   /* where each sits by its own style sheet rule: measured once per window size, with anything set here taken off first */
   const nat=e=>{if(!e)return null;const c=getComputedStyle(e);if(c.display==='none'||c.visibility==='hidden')return null;let n=dockNat.get(e);if(!n){const b0=e.style.bottom,r0=e.style.right;e.style.bottom='';e.style.right='';const b=e.getBoundingClientRect();e.style.bottom=b0;e.style.right=r0;if(!b.width)return null;n={b:mr.bottom-b.bottom,h:b.height,gap:mr.right-b.right};dockNat.set(e,n)}const w=e.getBoundingClientRect().width;return{b:n.b,h:n.h,l:mr.right-n.gap-w,r:mr.right-n.gap}};
   const under=n=>r.width>0&&n.r>r.left&&n.l<r.right&&n.b<dt&&n.b+n.h>mr.bottom-r.bottom,put=(e,b,rt)=>{if(e.style.bottom!==b)e.style.bottom=b;if(e.style.right!==rt)e.style.right=rt};
-  const dw=$('.drawer.right'),q=dw&&!dw.hidden?dw.getBoundingClientRect():null,side=q&&q.width>0&&q.bottom>r.top-60?Math.round(mr.right-q.left+8)+'px':'';const col=[],scol=[];/* what already stands in the corner, and beside the drawer, bottom to top */const stack=(c,b,h)=>{c.sort((x,y)=>x[0]-y[0]).forEach(k=>{if(b<k[1]&&b+h>k[0])b=k[1]+8});c.push([b,b+h]);return b};
+  const dw=$('.drawer.right'),q=dw&&!dw.hidden?dw.getBoundingClientRect():null,side=q&&q.width>0&&q.bottom>r.top-60?Math.round(mr.right-q.left+8)+'px':'';const col=[],scol=[];/* what already stands in the corner, and beside the drawer, bottom to top */
+  /* bars that come and go near the corner (the walls line's bar, the Done chip, Select several, the sun bar) are obstacles too: nothing is lifted onto them */
+  for(const q of ['#polybar','#esc','#multibar','#sun-bar','#pstrip']){const e=$(q);if(!e||e.hidden)continue;const b=e.getBoundingClientRect();if(!b.width||!b.height)continue;const c=[mr.bottom-b.bottom,mr.bottom-b.top];if(b.right>mr.right-260)col.push(c);if(q&&dw&&!dw.hidden){const qq=dw.getBoundingClientRect();if(b.right>qq.left-260&&b.left<qq.left)scol.push(c)}}const stack=(c,b,h)=>{c.sort((x,y)=>x[0]-y[0]).forEach(k=>{if(b<k[1]&&b+h>k[0])b=k[1]+8});c.push([b,b+h]);return b};
   /* the readout goes above the dock; with Details open it stands left of that drawer, not behind it */
   [$('#vcb'),$('.coords')].forEach(e=>{const n=nat(e);if(!n)return;if(under(n))put(e,Math.round(stack(side?scol:col,dt+8,n.h))+'px',side);else{put(e,'','');col.push([n.b,n.b+n.h])}});
   /* the view button and the value box keep their own place unless the dock or the readout is in it; then they stack upward */
@@ -496,7 +500,7 @@ function northSVG(cx,cy,r,n){/* arrow for exports, in world units */
   return `<g transform="translate(${cx} ${cy}) rotate(${n})" font-family="Inter,Arial,sans-serif"><circle r="${r}" fill="none" stroke="#1d2a38" stroke-width="${r*0.06}"/><path d="M0 ${-r*0.82} L${r*0.26} ${r*0.3} L0 ${r*0.1} L${-r*0.26} ${r*0.3} Z" fill="#1d2a38"/><text y="${-r*0.95}" text-anchor="middle" font-size="${r*0.5}" font-weight="700" fill="#1d2a38">N</text></g>`}
 (function(){const w=$('#north');if(!w)return;let drag=null;
   const ang=e=>{const r=w.getBoundingClientRect();return Math.atan2(e.clientX-(r.left+r.width/2),-(e.clientY-(r.top+r.height/2)))*180/Math.PI};
-  w.addEventListener('pointerdown',e=>{/* works in 2D and 3D: the drag turns north by the same angle the finger turns round the arrow, whatever way the camera faces */e.stopPropagation();if(e.button!==0&&e.pointerType==='mouse')return;drag={a0:ang(e),n0:num(S.north,0),moved:false};w.setPointerCapture(e.pointerId);e.preventDefault()});
+  w.addEventListener('pointerdown',e=>{/* works in 2D and 3D: the drag turns north by the same angle the finger turns round the arrow, whatever way the camera faces */e.stopPropagation();if(e.button!==0&&e.pointerType==='mouse')return;drag={a0:ang(e),n0:num(S.north,0),moved:false};capPtr(w,e.pointerId);e.preventDefault()});
   w.addEventListener('pointermove',e=>{if(!drag)return;const d=ang(e)-drag.a0;if(Math.abs(d)>2)drag.moved=true;if(drag.moved){const v=Math.round((drag.n0+d)/5)*5,nv=((v%360)+360)%360;if(nv!==S.north){S.north=nv;drawNorth();/* 3D: shadows follow while dragging */if(is3D&&SUN.on&&!drag.raf)drag.raf=requestAnimationFrame(()=>{if(drag)drag.raf=0;try{applySun()}catch(e){}})}}});
   const end=e=>{if(!drag)return;const m=drag.moved,n0=drag.n0;drag=null;if(m){const nv=S.north;S.north=n0;checkpoint();S.north=nv;markDirty();if(SUN.on)applySun();toast(num(S.north,0)===0?'North is up':`North is ${S.north}° clockwise from up`)}};
   w.addEventListener('pointerup',end);w.addEventListener('pointercancel',end);
@@ -1363,12 +1367,12 @@ svg.addEventListener('pointerdown',ev=>{
   closePops();
   const w=pointerWorld(ev);
   if(ev.button===2){ev.preventDefault();if(polyTool()&&polyPts&&polyPts.length>=2){finishPoly(false);return}if(tool==='place'||polyPts||tool==='room')setTool('select');return}
-  if(ev.button===1||spaceDown||tool==='pan'){if(spaceDown&&SU)SU.spaceUsed=true;drag={m:'pan',sx:ev.clientX,sy:ev.clientY,vx:V.x,vy:V.y};svg.setPointerCapture(ev.pointerId);svg.style.cursor='grabbing';return}
+  if(ev.button===1||spaceDown||tool==='pan'){if(spaceDown&&SU)SU.spaceUsed=true;drag={m:'pan',sx:ev.clientX,sy:ev.clientY,vx:V.x,vy:V.y};capPtr(svg,ev.pointerId);svg.style.cursor='grabbing';return}
   if(ev.pointerType!=='mouse'&&tool==='select'&&!WALK.on&&!polyPts&&!calib&&!detBox&&!walkPick){clearTimeout(lpTimer);const sx=ev.clientX,sy=ev.clientY,pid=ev.pointerId,tgt=ev.target;
     lpTimer=setTimeout(()=>{if(!pointers.has(pid))return;const p=pointers.get(pid);if(Math.hypot(p[0]-sx,p[1]-sy)>10)return;drag=null;try{svg.releasePointerCapture(pid)}catch(e){}pointers.delete(pid);lpFired=true;lpMenuPid=pid;if(navigator.vibrate)navigator.vibrate(8);showCtx({clientX:sx,clientY:sy,target:tgt,preventDefault(){}})},480)}
   if(ev.pointerType==='touch'&&!polyPts&&!walkPick&&!calib&&!detBox&&!underMove){const onObj=ev.target.closest('[data-id],[data-vh],[data-bh],[data-aim],[data-pin],[data-roth]');
     const onSec=!is3D&&S.section&&S.section.a&&(()=>{const w=toWorld(ev);return segDist(w[0],w[1],S.section.a,S.section.b)<fs(12)})();
-    if(!onSec&&(PEN_SEEN||(tool==='select'&&!onObj))){drag={m:'pan',sx:ev.clientX,sy:ev.clientY,vx:V.x,vy:V.y};svg.setPointerCapture(ev.pointerId);return}}
+    if(!onSec&&(PEN_SEEN||(tool==='select'&&!onObj))){drag={m:'pan',sx:ev.clientX,sy:ev.clientY,vx:V.x,vy:V.y};capPtr(svg,ev.pointerId);return}}
   if(ev.button!==0)return;
   /* double-click to rename a room. Detected here because the first click redraws the plan, so the browser often never fires dblclick */
   {const now=performance.now(),dbl=lastDown&&!lastDown.multi&&now-lastDown.t<500&&Math.hypot(ev.clientX-lastDown.x,ev.clientY-lastDown.y)<8;lastDown={t:now,x:ev.clientX,y:ev.clientY};
@@ -1379,7 +1383,7 @@ svg.addEventListener('pointerdown',ev=>{
     if(dbl&&!polyPts&&!calib&&!detBox&&!walkPick&&(tool==='select'||tool==='room')){const hit=dblTarget(ev);if(hit){lastDown=null;drag=null;ev.preventDefault();
       if(typeof SU!=='undefined'&&SU&&suOn()&&hit.gid&&SU.gctx!==hit.gid&&tool==='select'){suGroupEnter(hit.gid);return}
       if(hit.t==='room')renameRoom(hit);else if(hit.t==='item')renameItem(hit);else{setSel([hit.id]);showTab('sel');setTimeout(()=>{const i=$('#f-text');if(i){i.focus();i.select()}},30)}return}}}
-  svg.setPointerCapture(ev.pointerId);
+  capPtr(svg,ev.pointerId);
   const sw=[snapV(w[0]),snapV(w[1])];
   if(calib){calib.push(w);if(calib.length===2){renderUnderPanel();ev.preventDefault();/* after the pointer's own default action, which would take the focus back */setTimeout(()=>{const inp=$('#cal-len');if(inp){inp.focus();inp.select()}},0)}updateHint();render();return}
   if(walkPick){drag={m:'walkpick',a:w,b:w};return}
@@ -3235,7 +3239,7 @@ $('#esc')&&$('#esc').addEventListener('click',()=>escapeAction());
 $('#pstrip-done')&&$('#pstrip-done').addEventListener('click',()=>setTool('select'));
 /* phones: pull a sheet down by its handle to dismiss it; a short pull springs back */
 $$('.grab[data-close]').forEach(g=>{let y0=null,dr=null;const dw=()=>g.closest('.drawer');
-  g.addEventListener('pointerdown',e=>{y0=e.clientY;dr=dw();dr.style.transition='none';g.setPointerCapture(e.pointerId)});
+  g.addEventListener('pointerdown',e=>{y0=e.clientY;dr=dw();dr.style.transition='none';capPtr(g,e.pointerId)});
   g.addEventListener('pointermove',e=>{if(y0==null||!dr)return;const dy=Math.max(0,e.clientY-y0);if(dy>4)g.dataset.swiped='1';dr.style.transform=`translateY(${dy}px)`;dr.style.opacity=String(Math.max(0.35,1-dy/400))});
   const end=e=>{if(y0==null||!dr)return;const dy=e.clientY-y0;const d=dr;y0=null;dr=null;d.style.transition='';d.style.transform='';d.style.opacity='';
     /* a real pull (over 70 px) dismisses; a shorter one springs back; a plain tap falls through to the click handler, which also dismisses */
@@ -3529,7 +3533,7 @@ svg.addEventListener('pointerdown',ev=>{
   if(tool==='su-move'){if(SU.mv){suMoveCommit();SU.downAt=null;return}const l=suTargets(ev);if(!l){toast('Click the object to move, or select first');return}suMoveStart(l,pointSnap(w,{alt:ev.altKey,ids:new Set(l.concat(carried(l)).map(o=>o.id))}).p);return}
   if(tool==='su-rotate'){if(!SU.rt){const l=suTargets(ev);if(!l){toast('Select what to rotate first, or click it');return}suRotStart(l,pointSnap(w,{alt:ev.altKey}).p);return}
     if(SU.rt.stage===1){suRotRef(pointSnap(w,{alt:ev.altKey}).p);return}suRotCommit();SU.downAt=null;return}
-  if(tool==='su-erase'){SU.er={ids:[]};try{svg.setPointerCapture(ev.pointerId)}catch(e){}suEraseAt(ev);return}
+  if(tool==='su-erase'){SU.er={ids:[]};try{capPtr(svg,ev.pointerId)}catch(e){}suEraseAt(ev);return}
   if(tool==='su-zwin'){if(SU.zw){suZoomWinEnd(w);return}SU.zw={a:w,b:w};return}
   if(tool==='su-arc'){const p=pointSnap(w,{alt:ev.altKey}).p;if(!SU.arc){SU.arc={a:p,b:null,h:0,e:p};updateHint();return}if(!SU.arc.b){if(Math.hypot(p[0]-SU.arc.a[0],p[1]-SU.arc.a[1])<100)return;SU.arc.b=p;updateHint();return}const A=SU.arc;SU.arc=null;checkpoint();const wl=suArcWall(A.a,A.b,A.h);S.objs.push(wl);sel=new Set([wl.id]);markDirty();clashDirty=true;render();renderInspector();updateHint();return}
   if(tool==='su-circle'||tool==='su-polygon'){const p=pointSnap(w,{alt:ev.altKey}).p;if(SU.cir&&SU.cir.c){suCirFinish();SU.downAt=null;return}const k=tool==='su-circle'?'circle':'poly';SU.cir={k,c:p,r:0,n:(SU.cir&&SU.cir.n)||+P['su'+k+'N']||(k==='circle'?24:6),a0:0};SU.typed='';updateHint();return}
@@ -3731,9 +3735,9 @@ function su3ppm(p){const cv=$('#v3c'),r=cv.getBoundingClientRect(),a=p.clone().p
 (()=>{const cv=$('#v3c'),host=$('#v3');if(!cv||!host)return;/* on the 3D view's container, in the capture phase, so these tools act before anything listening on the canvas */
   host.addEventListener('pointerdown',e=>{if(e.target!==cv)return;if(!is3D||WALK.on||e.button!==0||(tool!=='su-move'&&tool!=='su-rotate'))return;e.stopImmediatePropagation();e.preventDefault();SU.d3down=[e.clientX,e.clientY];
     if(tool==='su-move'){if(SU.mv){suMoveCommit();SU.d3down=null;return}const h=su3pick(e);let l=selList().filter(o=>!fixed(o));if(!l.length&&h){l=groupOf(h.o).filter(o=>!fixed(o));sel=new Set(l.map(o=>o.id))}if(!l.length){toast('Press on what to move');return}
-      const fp=floorAt(e)||[h?h.p.x*1000:0,h?h.p.z*1000:0];if(T3.controls)T3.controls.enabled=false;suMoveStart(l,[Math.round(fp[0]),Math.round(fp[1])]);SU.mv.y0=e.clientY;SU.mv.ppm=h?su3ppm(h.p):1;SU.mv.z0=l.map(o=>[o.id,+o.z||0]);try{cv.setPointerCapture(e.pointerId)}catch(_){};return}
+      const fp=floorAt(e)||[h?h.p.x*1000:0,h?h.p.z*1000:0];if(T3.controls)T3.controls.enabled=false;suMoveStart(l,[Math.round(fp[0]),Math.round(fp[1])]);SU.mv.y0=e.clientY;SU.mv.ppm=h?su3ppm(h.p):1;SU.mv.z0=l.map(o=>[o.id,+o.z||0]);try{capPtr(cv,e.pointerId)}catch(_){};return}
     if(tool==='su-rotate'){if(SU.rt&&SU.rt.stage===2){suRotCommit();SU.d3down=null;if(T3.controls)T3.controls.enabled=true;return}const h=su3pick(e);let l=selList().filter(o=>!fixed(o));if(!l.length&&h){l=groupOf(h.o).filter(o=>!fixed(o));sel=new Set(l.map(o=>o.id))}if(!l.length){toast('Press on what to rotate');return}
-      const b=unionBox(l),c=[(b.x0+b.x1)/2,(b.y0+b.y1)/2],fp=floorAt(e)||[c[0]+1000,c[1]];if(T3.controls)T3.controls.enabled=false;suRotStart(l,c);suRotRef([fp[0]+(Math.hypot(fp[0]-c[0],fp[1]-c[1])<100?1000:0),fp[1]]);try{cv.setPointerCapture(e.pointerId)}catch(_){}}},true);
+      const b=unionBox(l),c=[(b.x0+b.x1)/2,(b.y0+b.y1)/2],fp=floorAt(e)||[c[0]+1000,c[1]];if(T3.controls)T3.controls.enabled=false;suRotStart(l,c);suRotRef([fp[0]+(Math.hypot(fp[0]-c[0],fp[1]-c[1])<100?1000:0),fp[1]]);try{capPtr(cv,e.pointerId)}catch(_){}}},true);
   host.addEventListener('pointermove',e=>{if(!is3D||(tool!=='su-move'&&tool!=='su-rotate'))return;
     if(SU.mv){e.stopImmediatePropagation();const m=SU.mv;if(m.akey==='z'){let dz=(m.y0-e.clientY)/m.ppm;dz=Math.round(dz/(e.altKey?10:50))*(e.altKey?10:50);m.dz=dz;m.z0.forEach(([id,z])=>{const o=byId(id);if(o&&o.t==='item')o.z=Math.max(0,z+dz)||undefined});m.d=[0,0];suB3();vcbSync();return}
       const fp=floorAt(e);if(!fp)return;m.raw=[fp[0]-m.base[0],fp[1]-m.base[1]];suMoveTo(m.raw,e.shiftKey);vcbSync();return}
@@ -3826,7 +3830,7 @@ function suChipFor(){const L=SU.last;if(!L||L.kind!=='pp')return;if(!suChip){suC
   const ppm=(p)=>{const{camera}=T3,r=cv.getBoundingClientRect();const a=p.clone().project(camera),b=p.clone();b.y+=1;b.project(camera);return Math.max(0.005,Math.abs(a.y-b.y)*r.height/2/1000)};
   host.addEventListener('pointerdown',e=>{if(e.target!==cv)return;if(tool!=='su-push'||!is3D||WALK.on||e.button!==0)return;e.stopImmediatePropagation();e.preventDefault();
     if(SU.pp){suPPCommit();return}const h=pick(e);if(!h){toast('Press on an item, a wall or a floor');return}const t=suPPTarget(h.o,h.wall);if(!t)return;if(suChip)suChip.hidden=true;
-    if(T3.controls)T3.controls.enabled=false;suPPStart(t,e,ppm(h.p));SU.pp.down=[e.clientX,e.clientY];try{cv.setPointerCapture(e.pointerId)}catch(_){}},true);
+    if(T3.controls)T3.controls.enabled=false;suPPStart(t,e,ppm(h.p));SU.pp.down=[e.clientX,e.clientY];try{capPtr(cv,e.pointerId)}catch(_){}},true);
   host.addEventListener('pointermove',e=>{const p=SU.pp;if(!p||!is3D||tool!=='su-push')return;e.stopImmediatePropagation();let v=p.v0+(p.y0-e.clientY)/p.ppm;const st=e.altKey?10:50;v=Math.round(v/st)*st;if(Math.abs(e.clientY-p.y0)>3)p.moved=true;if(v!==p.t.get())suPPSet(v)},true);
   host.addEventListener('pointerup',e=>{const p=SU.pp;if(!p||tool!=='su-push')return;e.stopImmediatePropagation();if(p.down&&Math.hypot(e.clientX-p.down[0],e.clientY-p.down[1])>6){suPPCommit()}else{p.armed=true;p.down=null;updateHint()}},true);
 })();
@@ -3962,7 +3966,7 @@ function tutCard(){if(TUT.el)return;const el=TUT.el=document.createElement('div'
   TUT.ring=document.createElement('div');TUT.ring.id='tut-ring';TUT.ring.hidden=true;document.body.appendChild(TUT.ring);
   el.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const a=b.dataset.ta;if(a==='x')tutExit();else if(a==='auto')tutAuto();else if(a==='next')tutGo(TUT.i+1);else if(a==='back'){if(TUT.i>0)tutGo(TUT.i-1)}else if(a==='tool'){const st=tutStep();if(st&&st.tool)setTool(st.tool)}else if(a==='menu'){tutExit();tutOpen()}else if(a==='nextch')tutStart(TUT.ch+1)});
   /* the card can be dragged out of the way by its top bar */
-  let d=null;el.addEventListener('pointerdown',e=>{if(!e.target.closest('.th')||e.target.closest('button'))return;const r=el.getBoundingClientRect(),m=$('#main').getBoundingClientRect();d={x:e.clientX-(r.left-m.left),y:e.clientY-(r.top-m.top)};el.setPointerCapture(e.pointerId);e.preventDefault()});
+  let d=null;el.addEventListener('pointerdown',e=>{if(!e.target.closest('.th')||e.target.closest('button'))return;const r=el.getBoundingClientRect(),m=$('#main').getBoundingClientRect();d={x:e.clientX-(r.left-m.left),y:e.clientY-(r.top-m.top)};capPtr(el,e.pointerId);e.preventDefault()});
   el.addEventListener('pointermove',e=>{if(!d)return;const m=$('#main').getBoundingClientRect();TUT.moved=true;el.style.left=Math.max(4,Math.min(m.width-el.offsetWidth-4,e.clientX-d.x))+'px';el.style.top=Math.max(4,Math.min(m.height-el.offsetHeight-4,e.clientY-d.y))+'px';el.style.bottom='auto'});
   const up=()=>{d=null};el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
   /* fit, and any other step that is simply a press of one button */
@@ -4116,7 +4120,7 @@ function init3D(){
   const vhAt=e=>{const r=cv.getBoundingClientRect();const rc=new THREE.Raycaster();rc.setFromCamera(new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1),camera);const h=rc.intersectObjects(group.children.filter(c=>c.userData.vh),false)[0];return h?h.object:null};
   let vh3=null;
   $('#v3').addEventListener('pointerdown',e=>{if(e.target!==cv||WALK.on||bldView||tool==='paint'||d3Active()||e.button!==0)return;const hm=vhAt(e);if(!hm)return;e.stopPropagation();const o=byId(hm.userData.vh.id);if(!o)return;
-    vh3={o,i:hm.userData.vh.i,hm,sx:e.clientX,sy:e.clientY,moved:false,alt:e.altKey,old:clone(o.pts),rect:e.altKey?null:rectFrame(o,hm.userData.vh.i)};try{cv.setPointerCapture(e.pointerId)}catch(err){}},true);
+    vh3={o,i:hm.userData.vh.i,hm,sx:e.clientX,sy:e.clientY,moved:false,alt:e.altKey,old:clone(o.pts),rect:e.altKey?null:rectFrame(o,hm.userData.vh.i)};try{capPtr(cv,e.pointerId)}catch(err){}},true);
   cv.addEventListener('pointermove',e=>{if(!vh3)return;if(!vh3.moved&&Math.hypot(e.clientX-vh3.sx,e.clientY-vh3.sy)<4)return;const p=floorAt(e);if(!p)return;
     if(!vh3.moved){vh3.moved=true;checkpoint()}const q=vh3.o.site?(P.snap?[snapV(p[0]),snapV(p[1])]:p):pointSnap(p,{alt:e.altKey,exV:{o:vh3.o,i:vh3.i}}).p;
     if(vh3.rect){const R=vh3.rect,a=(q[0]-R.C[0])*R.u[0]+(q[1]-R.C[1])*R.u[1],bb=(q[0]-R.C[0])*R.v[0]+(q[1]-R.C[1])*R.v[1],pt=(x,y)=>[Math.round(R.C[0]+R.u[0]*x+R.v[0]*y),Math.round(R.C[1]+R.u[1]*x+R.v[1]*y)];const P_=vh3.o.pts;P_[R.iB]=pt(a,0);P_[R.iD]=pt(0,bb);P_[vh3.i]=pt(a,bb)}
@@ -4143,7 +4147,7 @@ function init3D(){
   $('#v3').addEventListener('contextmenu',e=>{/* a long-press or right-click on a control over the 3D view (the Sun bar's fields, say) is not a press on the model behind it */if(e.target!==$('#v3c')){if(!e.target.closest('input,textarea,select'))e.preventDefault();return}e.preventDefault();if(WALK.on||bldView)return;if(d3ClickPoly(tool)&&polyPts&&polyPts.length>=2){finishPoly(false);drawD3Overlay();return}if(d3Active()){setTool('select');return}const it=itemAt(e);const g=floorAt(e);ctxFrom3D(e,it,g)});
   /* ---- draw on the ground plane in 3D ---- */
   $('#v3').addEventListener('pointerdown',e=>{if(e.target!==cv||WALK.on||bldView||e.button!==0||!d3Active())return;const w=floorAt(e);if(!w)return;
-    if(d3RectTool(tool)||tool==='measure'||tool==='section'){e.stopPropagation();controls.enabled=false;const a=(P.snap&&!altDown&&!ctrlDown&&tool!=='section')?[snapV(w[0]),snapV(w[1])]:[Math.round(w[0]),Math.round(w[1])];d3drag={mode:tool,a,b:a.slice()};try{cv.setPointerCapture(e.pointerId)}catch(x){}drawD3Overlay();return}
+    if(d3RectTool(tool)||tool==='measure'||tool==='section'){e.stopPropagation();controls.enabled=false;const a=(P.snap&&!altDown&&!ctrlDown&&tool!=='section')?[snapV(w[0]),snapV(w[1])]:[Math.round(w[0]),Math.round(w[1])];d3drag={mode:tool,a,b:a.slice()};try{capPtr(cv,e.pointerId)}catch(x){}drawD3Overlay();return}
     if(d3ClickPoly(tool)){d3down={x:e.clientX,y:e.clientY};/* decide click vs orbit on pointerup */}
   },true);
   $('#v3').addEventListener('pointermove',e=>{if(e.target===cv&&!WALK.on&&!bldView&&e.pointerType==='mouse'){const g=floorAt(e);if(g)lastW=[Math.round(g[0]),Math.round(g[1])]}if(!d3Active())return;const w=floorAt(e);if(w)lastW3=w;
@@ -4178,7 +4182,7 @@ function init3D(){
     if(addMod(e)){grp.forEach(x=>sel.has(x.id)?sel.delete(x.id):sel.add(x.id));renderInspector();build3D();return}
     if(!sel.has(it.id)){sel=new Set(grp.map(x=>x.id));renderInspector();build3D()}
     const list=selList().filter(o=>o.t==='item');const gs={};group.children.forEach(c=>{if(c.userData.id)gs[c.userData.id]=c});
-    mv3={p0:p,pid:e.pointerId,orig:list.map(o=>[o.id,clone(o)]),gs,dx:0,dy:0,moved:false};try{cv.setPointerCapture(e.pointerId)}catch(err){}},true);
+    mv3={p0:p,pid:e.pointerId,orig:list.map(o=>[o.id,clone(o)]),gs,dx:0,dy:0,moved:false};try{capPtr(cv,e.pointerId)}catch(err){}},true);
   /* a second finger while a 3D move is under way locks it to one axis (as on the plan); it never reaches the orbit controls */
   cv.addEventListener('pointerdown',e=>{if(mv3&&e.pointerId!==mv3.pid&&e.pointerType!=='mouse'&&mv3.hold==null){mv3.hold=e.pointerId;e.stopPropagation();e.preventDefault();toast('Axis locked · lift the second finger to free')}},true);
   cv.addEventListener('pointermove',e=>{if(!mv3)return;if(e.pointerId!==mv3.pid){if(e.pointerId===mv3.hold)e.stopPropagation();return}const p=floorAt(e);if(!p)return;let dx=p[0]-mv3.p0[0],dy=p[1]-mv3.p0[1];
@@ -4196,7 +4200,7 @@ function init3D(){
   const arr3Off=()=>{if(!arr3)return;try{cv.releasePointerCapture(arr3.pid)}catch(err){}arr3=null;T3.controls.enabled=true;ghost3D(null)};
   v3w.addEventListener('pointerdown',e=>{if(e.target!==cv||tool!=='place'||!placeLib||WALK.on||bldView||e.button!==0)return;if(e.pointerType==='touch')return;
     if(placeLib.missing){e.stopPropagation();return toast('This set uses items that are not in the library.')}if(placeLib.shape==='window'||placeLib.shape==='fcuw')return;
-    const p=floorAt(e);if(!p)return;e.stopPropagation();e.preventDefault();const gh=ghostAt(p,e.altKey);arr3={pid:e.pointerId,gh,a:p,b:p,sx:e.clientX,sy:e.clientY,moved:false};T3.controls.enabled=false;try{cv.setPointerCapture(e.pointerId)}catch(err){}},true);
+    const p=floorAt(e);if(!p)return;e.stopPropagation();e.preventDefault();const gh=ghostAt(p,e.altKey);arr3={pid:e.pointerId,gh,a:p,b:p,sx:e.clientX,sy:e.clientY,moved:false};T3.controls.enabled=false;try{capPtr(cv,e.pointerId)}catch(err){}},true);
   v3w.addEventListener('pointermove',e=>{if(!arr3||e.pointerId!==arr3.pid)return;e.stopPropagation();const p=floorAt(e);if(!p)return;arr3.b=p;
     if(!arr3.moved&&Math.hypot(e.clientX-arr3.sx,e.clientY-arr3.sy)>6)arr3.moved=true;if(arr3.moved){const cs=arrCopies(arr3);ghost3D(cs.flat());$('#coords').textContent=`${cs.length} × ${placeLib.name}`}},true);
   v3w.addEventListener('pointerup',e=>{if(!arr3||e.pointerId!==arr3.pid)return;e.stopPropagation();const d=arr3;arr3Off();const list=d.moved?arrCopies(d).flat():d.gh.objs;addObjs(list,false);if(d.moved)toast(`Placed ${arrCopies(d).length} × ${placeLib?placeLib.name:'item'}`);build3D()},true);
@@ -4797,7 +4801,7 @@ function campusPlaceNew(){const R=campusRows(),me=R.find(r=>r.t===curTab),oth=R.
   S.site={x:Math.round(Math.max(...oth.map(o=>o.x1))+20000-b.x0),y:Math.round(Math.min(...oth.map(o=>o.y0))-b.y0),r:0,links:[]};markDirty();CAMP.sel=curTab}
 function campusDragStart(e){const g=e.target.closest('[data-cb]'),svg=$('#campus-map');if(!g||!svg)return;const R=campusRows(),r=R[+g.dataset.cb];if(!r)return;e.preventDefault();svg.focus();
   const m=svg.getScreenCTM(),k=m&&m.a?1/m.a:100;svg.querySelectorAll('g.sel').forEach(x=>x.classList.remove('sel'));g.classList.add('sel');CAMP.sel=r.t;
-  CAMP.drag={g,r,k,sx:e.clientX,sy:e.clientY,dx:0,dy:0,box:campusBoxOf(campusPoly(r)),oth:R.filter(x=>x!==r).map(x=>campusBoxOf(campusPoly(x))),id:e.pointerId};try{svg.setPointerCapture(e.pointerId)}catch(_){}}
+  CAMP.drag={g,r,k,sx:e.clientX,sy:e.clientY,dx:0,dy:0,box:campusBoxOf(campusPoly(r)),oth:R.filter(x=>x!==r).map(x=>campusBoxOf(campusPoly(x))),id:e.pointerId};try{capPtr(svg,e.pointerId)}catch(_){}}
 function campusDragMove(e){const D=CAMP.drag;if(!D||e.pointerId!==D.id)return;let dx=(e.clientX-D.sx)*D.k,dy=(e.clientY-D.sy)*D.k;if(Math.hypot(e.clientX-D.sx,e.clientY-D.sy)<4&&!D.on)return;D.on=true;
   const grid=500,tol=14*D.k;dx=Math.round((D.r.site.x+dx)/grid)*grid-D.r.site.x;dy=Math.round((D.r.site.y+dy)/grid)*grid-D.r.site.y;
   /* edges within reach of a neighbour's edges line up with them: touch, or share a face line */
@@ -5034,7 +5038,7 @@ document.addEventListener('pointerup',()=>{WALK.look=null});
 /* virtual joystick (touch): drag the knob to walk; a short tap on the view opens the door or lift in front of you */
 {const jy=$('#joy');if(jy){const kn=jy.querySelector('.knob');let pid=null;const R=46;
   const setJ=(e)=>{const b=jy.getBoundingClientRect();let dx=e.clientX-(b.left+b.width/2),dy=e.clientY-(b.top+b.height/2);const L=Math.hypot(dx,dy)||1;if(L>R){dx=dx/L*R;dy=dy/L*R}kn.style.transform=`translate(${dx}px,${dy}px)`;WALK.joy={f:-dy/R,r:dx/R}};
-  jy.addEventListener('pointerdown',e=>{pid=e.pointerId;jy.setPointerCapture(pid);setJ(e);e.preventDefault()});
+  jy.addEventListener('pointerdown',e=>{pid=e.pointerId;capPtr(jy,pid);setJ(e);e.preventDefault()});
   jy.addEventListener('pointermove',e=>{if(e.pointerId===pid)setJ(e)});
   const end=e=>{if(e.pointerId!==pid)return;pid=null;WALK.joy=null;kn.style.transform=''};jy.addEventListener('pointerup',end);jy.addEventListener('pointercancel',end)}
  const c3=$('#v3c');let tapAt=null;c3.addEventListener('pointerdown',e=>{tapAt=(WALK.on&&e.pointerType==='touch')?[e.clientX,e.clientY,performance.now()]:null});
@@ -6076,7 +6080,7 @@ $('#ptabs').addEventListener('click',e=>{const c=e.target.closest('[data-tab-clo
 /* drag a plan tab sideways to reorder it, the way browser tabs move: the tab follows the pointer and swaps places as it passes a neighbour's middle */
 {let td=null,tabNoClick=false;const bar=$('#ptabs');
   bar.addEventListener('pointerdown',e=>{if(e.button)return;const t=e.target.closest('.ptab');if(!t||e.target.closest('.x')||tabs.length<2)return;td={el:t,pid:e.pointerId,x0:e.clientX,on:false}});
-  addEventListener('pointermove',e=>{if(!td||e.pointerId!==td.pid)return;const dx=e.clientX-td.x0;if(!td.on){if(Math.abs(dx)<7)return;td.on=true;tabDragging=true;td.el.classList.add('dragging');try{bar.setPointerCapture(td.pid)}catch(x){}}
+  addEventListener('pointermove',e=>{if(!td||e.pointerId!==td.pid)return;const dx=e.clientX-td.x0;if(!td.on){if(Math.abs(dx)<7)return;td.on=true;tabDragging=true;td.el.classList.add('dragging');try{capPtr(bar,td.pid)}catch(x){}}
     const el=td.el,r=el.getBoundingClientRect(),mid=r.left+r.width/2;const prev=el.previousElementSibling,next=el.nextElementSibling;
     if(prev&&prev.classList.contains('ptab')){const p=prev.getBoundingClientRect();if(mid<p.left+p.width/2){bar.insertBefore(el,prev);td.x0-=p.width+4}}
     if(next&&next.classList.contains('ptab')){const n=next.getBoundingClientRect();if(mid>n.left+n.width/2){bar.insertBefore(next,el);td.x0+=n.width+4}}

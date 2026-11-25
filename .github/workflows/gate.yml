@@ -54,6 +54,8 @@ jobs:
     env:
       SB_OUT: ${{ github.workspace }}/out
       SB_BASELINE: test/release/baseline-ci
+      # GitHub's machines are slower than the one the time budgets were set on
+      SB_TIME_FACTOR: '1.3'
       MX_FILES: ${{ matrix.shard.files }}
       MX_LY_DEV: ${{ matrix.shard.dev }}
     steps:

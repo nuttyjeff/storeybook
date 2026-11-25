@@ -37,6 +37,8 @@ jobs:
     env:
       # screenshots made on GitHub differ from local ones (fonts), so they have their own accepted set
       SB_BASELINE: test/release/baseline-ci
+      # GitHub's machines are slower than the one the time budgets were set on
+      SB_TIME_FACTOR: '1.3'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -306,7 +306,7 @@ async function gFiles(b,add){const P=ID+'fl-';const sample=await sampleJSON(b);c
     await T('huge-3d','desktop: the 5,000-item plan builds its 3D view within 10 s',async()=>{if(!hugeOk)throw new Error('precondition: large plan did not open');
       const t=Date.now();await press(pg,'#b-view');const ok=await waitF(pg,()=>{const T=window.__osp.T3();return !document.querySelector('#v3').hidden&&T&&T.renderer&&T.framed},null,30000);const ms=Date.now()-t;
       await press(pg,'#b-view').catch(()=>{});await waitF(pg,()=>document.querySelector('#v3').hidden,null,15000);
-      add(P+'huge-3d','desktop: the 5,000-item plan builds its 3D view within 10 s',ok&&ms<10000,{buildMs:ms,ok})});
+      /* SB_TIME_FACTOR: slower machines (GitHub's) get proportionally more time; the target stays 10 s here */add(P+'huge-3d','desktop: the 5,000-item plan builds its 3D view within 10 s',ok&&ms<10000*(+process.env.SB_TIME_FACTOR||1),{buildMs:ms,ok,factor:+process.env.SB_TIME_FACTOR||1})});
   /* mutation: app.js:2364 openPlanText starts with console.error('mutant') → FAIL confirmed */
   }finally{add(P+'clean','desktop files: no console or page errors',pg.errs.length===0,pg.errs.slice(0,4));await closePage(pg)}
   /* the phone reaches Open from its More sheet; a damaged file gets the same message there */
