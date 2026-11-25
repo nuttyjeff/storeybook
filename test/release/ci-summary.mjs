@@ -1,7 +1,7 @@
 /* combines the last.json of every gate part into one table for the GitHub run page; exits 1 if any part blocked */
 import fs from 'fs';import path from 'path';
 const dir=process.argv[2]||'results';let ok=true,all=[],parts=[];
-for(const d of fs.existsSync(dir)?fs.readdirSync(dir):[]){const f=path.join(dir,d,'last.json');if(!fs.existsSync(f)){parts.push([d.replace(/^result-/,''),'no result',0,0,0]);ok=false;continue}
+for(const d of fs.existsSync(dir)?fs.readdirSync(dir):[]){/* a part that also uploads screenshots nests its results one folder down (out/last.json) */const f=[path.join(dir,d,'last.json'),path.join(dir,d,'out','last.json')].find(x=>fs.existsSync(x))||path.join(dir,d,'last.json');if(!fs.existsSync(f)){parts.push([d.replace(/^result-/,''),'no result',0,0,0]);ok=false;continue}
   const j=JSON.parse(fs.readFileSync(f,'utf8'));const rows=j.rows||[];const fails=rows.filter(r=>!r.pass&&!r.known),kn=rows.filter(r=>!r.pass&&r.known);
   if(!j.ok)ok=false;all.push(...fails.map(r=>[d.replace(/^result-/,''),r]));parts.push([d.replace(/^result-/,''),j.ok?'OK':'BLOCKED',rows.length,rows.length-fails.length-kn.length,kn.length])}
 console.log(`## ${ok?'✅ RELEASE OK':'❌ RELEASE BLOCKED'}\n\n| Part | Result | Checks | Pass | Known |\n|---|---|---:|---:|---:|`);

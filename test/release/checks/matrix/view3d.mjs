@@ -1,5 +1,5 @@
 /* matrix slice: the 3D view on desktop (mouse) and phone (touch). Rule under test: whatever a user can do in 2D must also work in 3D. */
-import {openApp,row,to3D,to2D,touch} from '../../lib.mjs';
+import {openApp,row,to3D,to2D,touch,turn90,SUKEYS} from '../../lib.mjs';
 export const name='view3d';
 
 /* ---- in-page helpers, installed once per page ---- */
@@ -127,7 +127,7 @@ async function suite(b,phone){
       await T.T('touchStart',[[pa[0],pa[1]]]);await pg.waitForTimeout(900);await T.T('touchEnd',[]);await pg.waitForTimeout(250);
       const menu=await ev(pg,()=>{const m=document.querySelector('#ctxmenu');return {shown:!!m&&!m.hidden,items:m?[...m.querySelectorAll('[data-cm]')].map(x=>x.dataset.cm):[]}});
       if(!menu.shown||!menu.items.includes('multi'))return {pass:false,detail:{menu,contextmenuEventFired:await ev(pg,()=>window.__cm),note:'long-press on an item in 3D did not open a menu with Select several (the 2D plan uses its own pointer timer so it works on iOS; 3D relies on the browser contextmenu event)'}};
-      await ev(pg,()=>document.querySelector('#ctxmenu [data-cm=multi]').click());await pg.waitForTimeout(150);await tap(pb[0],pb[1]);const s=await sel(pg);
+      await ev(pg,()=>document.querySelector('#ctxmenu [data-cm=multi]').click());await pg.waitForTimeout(150);/* where B is now: on a slower machine the camera may still be settling from the long-press */const pb2=await ptOf(B);await tap(pb2[0],pb2[1]);const s=await sel(pg);
       await press('#mbar [data-m=select]');const multiOff=await ev(pg,()=>document.querySelector('#multibar').hidden);
       return {pass:s.includes(A)&&s.includes(B)&&multiOff,detail:{n:s.length,hasA:s.includes(A),hasB:s.includes(B),multiOff}}});
     await ev(pg,()=>{window.__osp.setSel([])});
@@ -182,8 +182,8 @@ async function suite(b,phone){
   const detailsClose=async()=>{if(await ev(pg,()=>!document.querySelector('#d-insp').hidden))await press('#mbar [data-m=insp]');await pg.waitForTimeout(200)};
   // mutation: app.js ~2760 keydown `if(k==='r'){rotateSel(e.shiftKey?-90:90);return}` → `if(k==='r'){return}` → FAIL confirmed (d-rotate)
   // mutation: app.js ~2699 data-mact `if(k==='rot')rotateSel(90);` → `if(k==='rot');` → FAIL confirmed (p-rotate)
-  await chk('rotate','rotate the selection '+(phone?'(Details → Rotate)':'(R key)'),async()=>{await selA();const gA=await grpOf(pg,A);const mp0=await objMap(pg);const m0=await H(pg,(h,o,id)=>h.meshOf(id),A);const r0=await ev(pg,id=>window.__osp.byId(id).r||0,A);
-    if(phone){await detailsOpen();await press('#d-insp [data-mact=rot]');await detailsClose()}else await pg.keyboard.press('r');await W(pg,([a,r])=>(window.__osp.byId(a).r||0)!==r,[A,r0]);await meshSettled();
+  await chk('rotate','rotate the selection '+(phone?'(Details → Rotate)':SUKEYS()?'(Details › 90°)':'(R key)'),async()=>{await selA();const gA=await grpOf(pg,A);const mp0=await objMap(pg);const m0=await H(pg,(h,o,id)=>h.meshOf(id),A);const r0=await ev(pg,id=>window.__osp.byId(id).r||0,A);
+    if(phone){await detailsOpen();await press('#d-insp [data-mact=rot]');await detailsClose()}else await turn90(pg);await W(pg,([a,r])=>(window.__osp.byId(a).r||0)!==r,[A,r0]);await meshSettled();
     const r1=await ev(pg,id=>window.__osp.byId(id).r||0,A);const m1=await H(pg,(h,o,id)=>h.meshOf(id),A);const turned=((r1-r0)%360+360)%360===90;const d=delta(mp0,await objMap(pg));
     await ev(pg,()=>window.__osp.undo());await pg.waitForTimeout(200);return {pass:turned&&same_(d.chg,gA)&&!d.add.length&&!!m1&&Math.abs(m1.ry-m0.ry)>1,detail:{r0,r1,changed:d.chg.length,grp:gA.length,mesh0:m0,mesh1:m1}}});
   // mutation: app.js ~2739 keydown `if(k==='d'){e.preventDefault();duplicateSel();return}` → `…;return}` without duplicateSel → FAIL confirmed (d-dup)
@@ -234,7 +234,8 @@ async function suite(b,phone){
       await ev(pg,()=>window.__osp.setTool('select'));await pg.waitForTimeout(100);await go3D();await focus();const back=await ev(pg,()=>!document.querySelector('#v3').hidden);
       return {pass:r.is2D&&r.v2on&&!r.d3&&pg.errs.length===e0&&back,detail:{...r,newErrors:pg.errs.slice(e0),back}}})}
   // fix-test: app.js ~2765 keydown `if(is3D&&!['f','i','l'].includes(k))return;` → `if(is3D&&!['f','i','l','d','w','m'].includes(k))return;` → PASS confirmed
-  if(!phone){await chk('hotkeys','tool hotkeys (D room, W wall, M measure) start the tool in 3D as they do in 2D',async()=>{await to3D(pg);const res={};for(const [k,t] of [['d','room'],['w','poly'],['m','measure']]){await pg.keyboard.press(k);await pg.waitForTimeout(150);res[k]=await ev(pg,()=>window.__osp.d3Active());await pg.keyboard.press('Escape');await pg.waitForTimeout(100);await ev(pg,()=>window.__osp.setTool('select'))}
+  /* SketchUp keys: R rectangle, L line (walls) and M Move, which works on the 3D floor itself */
+  if(!phone){await chk('hotkeys',SUKEYS()?'tool hotkeys (R rectangle, L line, M move) start the tool in 3D as they do in 2D':'tool hotkeys (D room, W wall, M measure) start the tool in 3D as they do in 2D',async()=>{await to3D(pg);const res={};for(const [k,t] of SUKEYS()?[['r','room'],['l','poly'],['m','su-move']]:[['d','room'],['w','poly'],['m','measure']]){await pg.keyboard.press(k);await pg.waitForTimeout(150);res[k]=t==='su-move'?await ev(pg,()=>!document.querySelector('#v3').hidden&&!!document.querySelector('.dock [data-tool="su-move"].on')):await ev(pg,()=>window.__osp.d3Active());await pg.keyboard.press('Escape');await pg.waitForTimeout(100);await ev(pg,()=>window.__osp.setTool('select'))}
     return {pass:Object.values(res).every(Boolean),detail:res}})}
 
   /* 8. draw in 3D */

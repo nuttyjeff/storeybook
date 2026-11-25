@@ -120,7 +120,7 @@ async function suite(b,kind){
   const go2D=async()=>{await press('#v2d');await wait(()=>document.querySelector('#v3').hidden);await sleep(100)};
   const st=()=>ev(pg,()=>{const o=window.__osp,S=o.S();return {n:S.objs.length,sel:o.sel(),is3D:!document.querySelector('#v3').hidden,bld:!!o.bldView(),walk:o.WALK.on,roof:o.roofMode(),levels:S.bld?S.bld.levels.length:0}});
   /* every group starts from the sample plan in 2D with Select, everything off */
-  const reset=async()=>{await ev(pg,()=>{const o=window.__osp,q=s=>document.querySelector(s);if(o.WALK.on)q('#v3-walk').click();if(o.roofMode())o.switchFloor('roof');if(!q('#v3').hidden)q('#v2d').click();
+  const reset=async()=>{await ev(pg,()=>{const o=window.__osp,q=s=>document.querySelector(s);if(o.suReset)o.suReset();if(o.WALK.on)q('#v3-walk').click();if(o.roofMode())o.switchFloor('roof');if(!q('#v3').hidden)q('#v2d').click();
     const P=o.P();P.layers={};P.hideCats=[];if(P.rcp)q('#t-rcp').click();P.wall3d='full';q('#v3-walls').value='full';const SU=o.SUN();SU.on=false;SU.lat=1.35;q('#sun-bar').hidden=true;
     o.setTool('select');document.querySelectorAll('.pop').forEach(p=>p.hidden=true);const ms=q('#msheet');if(ms&&!ms.hidden)q('[data-msheet-close]').click();
     q('#m-sample').click();o.syncFloorOut();o.render();o.setSel([]);P.lib=false;P.insp=false;q('#d-lib').hidden=true;q('#d-insp').hidden=true;o.toastOff()});

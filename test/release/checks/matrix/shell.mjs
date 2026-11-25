@@ -101,7 +101,7 @@ const nObjs=pg=>ev(pg,()=>window.__osp.S().objs.length);
 /* reset to a known start (debug hook; never the action under test) */
 async function hardReset(pg){
   const su=pg.su;
-  await ev(pg,()=>{const o=window.__osp,g=s=>document.querySelector(s);if(o.WALK.on)g('#b-walk').click();if(o.roofMode())o.switchFloor(o.S().bld.active);
+  await ev(pg,()=>{const o=window.__osp,g=s=>document.querySelector(s);if(o.suReset)o.suReset();if(o.WALK.on)g('#b-walk').click();if(o.roofMode())o.switchFloor(o.S().bld.active);
     document.querySelectorAll('.keys-modal,.cmdk').forEach(p=>p.hidden=true);if(!g('#multibar').hidden)g('#multi-done').click();
     if(!g('#msheet').hidden)g('[data-msheet-close]').click();if(o.SUN().on)g('#v3-sun').click();
     for(let i=0;i<6&&LIVE_ESC();i++)g('#esc').click();
@@ -126,6 +126,7 @@ async function homeView(pg){await ev(pg,()=>document.querySelector('#z-fit').cli
     const k=Math.max(1,Math.ceil(Math.hypot(d[0],d[1])/140));const c=[195,400];
     for(let j=0;j<k;j++){const dx=d[0]/k,dy=d[1]/k,a=[c[0]-50-dx/2,c[1]-dy/2],b2=[c[0]+50-dx/2,c[1]-dy/2],n=8;await pg.fin.T('touchStart',[[a[0],a[1],1],[b2[0],b2[1],2]]);
       for(let i=1;i<=n;i++){await pg.fin.T('touchMove',[[a[0]+dx*i/n,a[1]+dy*i/n,1],[b2[0]+dx*i/n,b2[1]+dy*i/n,2]]);await sleep(16)}await pg.fin.T('touchEnd',[]);await sleep(60)}
+    /* the browser swallows a tap that lands just after a two-finger pan ends (it reads it as stopping the fling), so the first tap of the next check was lost now and then: walk-pick-p2, tool-room-p2, sheet-draw-p2 */await sleep(400);
     await pg.waitForFunction(()=>window.__osp.pointersN()===0,null,{timeout:4000}).catch(()=>{});
     /* the pan must leave empty ground on screen; if a stroke was lost, start over once */
     if(!pg.homeRetry&&!(await emptyPts(pg,1)).length){pg.homeRetry=true;try{return await homeView(pg)}finally{pg.homeRetry=false}}}
@@ -190,6 +191,7 @@ async function libRow(pg,re){const sel=await ev(pg,re=>{const r=[...document.que
 async function canvasPts(pg,n=2){if(await is3D(pg)){const c=await ev(pg,()=>{const r=document.querySelector('#v3c').getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2,r.width]});return [[c[0]-c[2]*0.12,c[1]+20],[c[0]+c[2]*0.08,c[1]+40],[c[0],c[1]+80]].slice(0,n)}return emptyPts(pg,n)}
 async function selectOne(pg){
   if(await is3D(pg)){const it=await item3D(pg);if(!it)throw new Error('no item on the 3D canvas');await pg.cvTap(it.x,it.y);await pg.waitForFunction(()=>window.__osp.sel().length>0,null,{timeout:3000}).catch(()=>{});return it}
+  /* SketchUp keys: two clicks on the same grouped item within the double-click time open the group (and empty the selection), so let the previous click age first */if(process.env.SB_SUKEYS)await sleep(450);
   const it=(await findItems(pg,1))[0];if(!it)throw new Error('no item on screen');await pg.cvTap(it.x,it.y);await pg.waitForFunction(()=>window.__osp.sel().length>0,null,{timeout:3000}).catch(()=>{});return it}
 async function ctxOn(pg,empty){
   let p;if(await is3D(pg)){p=empty?await empty3D(pg):await item3D(pg);if(p&&!Array.isArray(p))p=[p.x,p.y]}else{p=empty?(await emptyPts(pg,1))[0]:await findItems(pg,1).then(a=>a[0]&&[a[0].x,a[0].y])}

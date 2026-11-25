@@ -20,6 +20,7 @@ jobs:
         run: |
           SMALL='[
             {"name":"core","args":"--only=build,load,golden,smoke,detect,visual,deploy","files":"","dev":""},
+            {"name":"functions-chaos","args":"--only=build,functions,chaos","files":"","dev":""},
             {"name":"phone-3d-data","args":"--only=matrix","files":"phone2d,view3d,data","dev":""},
             {"name":"tablet-views","args":"--only=matrix","files":"tablet-desktop,views-building","dev":""},
             {"name":"objects-edit","args":"--only=matrix","files":"objects,edit-create","dev":""},
@@ -27,6 +28,8 @@ jobs:
           ]'
           FULL='[
             {"name":"robust","args":"--only=matrix","files":"robust","dev":""},
+            {"name":"sketchup-keys-a","args":"--only=matrix-su","files":"edit-create,tablet-desktop,shell,view3d","dev":""},
+            {"name":"sketchup-keys-b","args":"--only=matrix-su","files":"views-building,data,objects,robust","dev":""},
             {"name":"layout-small-phones","args":"--only=matrix","files":"layout","dev":"^(se|13mini|w320)$"},
             {"name":"layout-big-phones","args":"--only=matrix","files":"layout","dev":"^(15pm|px7|s8|13)$"},
             {"name":"layout-ipads","args":"--only=matrix","files":"layout","dev":"^(ipmini|ip7|ipp11|ipp13)$"},
@@ -51,6 +54,8 @@ jobs:
     env:
       SB_OUT: ${{ github.workspace }}/out
       SB_BASELINE: test/release/baseline-ci
+      # GitHub's machines are slower than the one the time budgets were set on
+      SB_TIME_FACTOR: '1.3'
       MX_FILES: ${{ matrix.shard.files }}
       MX_LY_DEV: ${{ matrix.shard.dev }}
     steps:
@@ -58,7 +63,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: mkdir -p out && node build.js

@@ -2,7 +2,7 @@
    Every check works on a small fixture plan (below), drives real mouse / keyboard input for the action under test,
    asserts the exact result, then undoes with Ctrl+Z (exact previous JSON) and redoes with Ctrl+Y.
    Set MX_EC_ONLY=<regex> to run only matching ids (used for mutation testing). */
-import {openApp,row,to3D} from '../../lib.mjs';
+import {openApp,row,to3D,turn90,SUKEYS} from '../../lib.mjs';
 export const name='matrix-edit-create';
 const ONLY=process.env.MX_EC_ONLY?new RegExp(process.env.MX_EC_ONLY):null;
 const ev=(pg,fn,a)=>pg.evaluate(fn,a);
@@ -124,9 +124,9 @@ add(B,'b3-nudge','arrow keys nudge the selection (one snap; Shift = 10 mm)',asyn
   return {pass:ok&&u1&&ur.ok&&s2!==s1,detail:{a1:[a1.x,a1.y],a2:[a2.x,a2.y],u1,ur}}});
 /* B4 */
 // mutation [rotate]: app.js:1395 `o.r=(((o.r||0)+deg)%360+360)%360` → `o.r=o.r||0` → FAIL confirmed (2D and 3D)
-add(B,'b4-rotate','R rotates the selection 90° clockwise, Shift+R anticlockwise, about its centre',async pg=>{
-  await selectOne(pg,'d1');const s0=await ST(pg);await pg.keyboard.press('r');const a=await O(pg,'d1');const sa=await ST(pg);const ura=await UR(pg,s0,sa);
-  await pg.keyboard.press('Shift+R');const b=await O(pg,'d1');const sb=await ST(pg);const urb=await UR(pg,s0,sb);
+add(B,'b4-rotate',(SUKEYS()?'Details › 90° clockwise and anticlockwise rotate':'R rotates the selection 90° clockwise, Shift+R anticlockwise,')+' the selection about its centre',async pg=>{
+  await selectOne(pg,'d1');const s0=await ST(pg);await turn90(pg);const a=await O(pg,'d1');const sa=await ST(pg);const ura=await UR(pg,s0,sa);
+  await turn90(pg,true);const b=await O(pg,'d1');const sb=await ST(pg);const urb=await UR(pg,s0,sb);
   const ok=a.r===90&&b.r===270&&a.x===1000&&a.y===800&&b.x===1000&&b.y===800;return {pass:ok&&ura.ok&&urb.ok,detail:{a:[a.x,a.y,a.r],b:[b.x,b.y,b.r],ura,urb}}});
 /* B5 */
 // mutation [dup]: app.js:1419 `function duplicateSel(){const l=selList();` → `function duplicateSel(){return;const l=selList();` → FAIL confirmed (2D and 3D)

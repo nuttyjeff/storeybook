@@ -134,7 +134,7 @@ async function tapEl(pg,sel){
     const at=()=>{const r=e.getBoundingClientRect();if(!r.width||!r.height)return {err:sel+' is not displayed'};const x=r.left+r.width/2,y=r.top+r.height/2;
       if(x<0||y<0||x>innerWidth||y>innerHeight)return {err:`${sel} is off-screen at ${Math.round(x)},${Math.round(y)} (viewport ${innerWidth}×${innerHeight})`};
       const h=document.elementFromPoint(x,y);if(!h||!(h===e||e.contains(h)||(h.tagName==='LABEL'&&h.contains(e))))return {err:`${sel} is covered by ${h?(h.tagName.toLowerCase()+(h.id?'#'+h.id:'')+(h.className&&typeof h.className==='string'?'.'+h.className.split(' ')[0]:'')):'nothing'}`};return {x,y}};
-    let a=at();if(a.err){e.scrollIntoView({block:'nearest',inline:'nearest'});a=at()}return a},sel);
+    /* bring it fully into its scrolling panel first: a field half cut off by the panel's edge has its centre on that edge, and the tap went through to the plan (13mini-p-kbd-det) */e.scrollIntoView({block:'nearest',inline:'nearest'});let a=at();return a},sel);
   if(p.err)throw new Error(p.err);await pg.tap(p.x,p.y);return p}
 const visible=(pg,sel)=>ev(pg,sel=>{const e=document.querySelector(sel);if(!e||e.closest('[hidden]'))return false;const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&getComputedStyle(e).display!=='none'},sel);
 const waitFor=(pg,fn,arg,ms=5000)=>pg.waitForFunction(fn,arg,{timeout:ms,polling:100});

@@ -25,7 +25,7 @@
    // mutation: app.js ~483 road stroke-width fixed 6000 → FAIL confirmed (f-road-th);  ~3119 trunk 3D width fixed → FAIL confirmed (f-trunk-w)
    // mutation: app.js ~2989 room raise ignored in 3D → FAIL confirmed (f-room-raise);  ~1490 pin Done ignored → FAIL confirmed (f-pin-done)
    // mutation: app.js ~2960 schedule3D never rebuilds the live 3D view → FAIL confirmed (f-item-w-3d) */
-import {openApp,row,to3D,to2D,touch} from '../../lib.mjs';
+import {openApp,row,to3D,to2D,touch,turn90,SUKEYS} from '../../lib.mjs';
 export const name='matrix-objects';
 const ONLY=process.env.MX_OB_ONLY?new RegExp(process.env.MX_OB_ONLY):null;
 const DUMP=!!process.env.MX_OB_DUMP;
@@ -456,12 +456,12 @@ async function opsGroup(b){const out=[];let pg;
       if(!await selectObj(pg,id))f.push('not selected');
       /* rotate: R four times; the first turn must change it, four must give back the exact object */
       await blur(pg);await pg.mouse.move(5,600);
-      await pg.keyboard.press('r');const r1=await until(pg,`id=>JSON.stringify(window.__osp.byId(id))`,id,v=>v!==o0);if(!r1.ok)f.push('R did not rotate it');
-      for(let k=0;k<3;k++){const prev=(await until(pg,`id=>JSON.stringify(window.__osp.byId(id))`,id,()=>true)).v;await pg.keyboard.press('r');await until(pg,`id=>JSON.stringify(window.__osp.byId(id))`,id,v=>v!==prev,1500)}
+      await turn90(pg);const r1=await until(pg,`id=>JSON.stringify(window.__osp.byId(id))`,id,v=>v!==o0);if(!r1.ok)f.push((SUKEYS()?'Details › 90° clockwise':'R')+' did not rotate it');
+      for(let k=0;k<3;k++){const prev=(await until(pg,`id=>JSON.stringify(window.__osp.byId(id))`,id,()=>true)).v;await turn90(pg);await until(pg,`id=>JSON.stringify(window.__osp.byId(id))`,id,v=>v!==prev,1500)}
       const r4=await until(pg,`id=>JSON.stringify(window.__osp.byId(id))`,id,v=>v===o0,1500);if(!r4.ok)f.push('4 × 90° did not return it to its original state: '+r4.v.slice(0,200)+' vs '+o0.slice(0,200));
       for(let k=0;k<4;k++)await pg.keyboard.press('Control+z');
       if(!(await until(pg,()=>{const S=window.__osp.S();return JSON.stringify({o:S.objs,p:S.pins||[],s:S.section||null,st:S.style||null})},null,v=>v===st0)).ok)f.push('4 × Ctrl+Z after the rotations did not restore the plan');
-      out.push(row(`mx-ob-op-rot-${id}`,`${nm}: R pressed 4 times turns it a full circle back to exactly where it was, and undoes`,!f.length&&!(pg.errs.length>e0),f.concat(pg.errs.slice(e0)).join('; ')));
+      out.push(row(`mx-ob-op-rot-${id}`,`${nm}: ${SUKEYS()?'Details › 90° clockwise':'R'} pressed 4 times turns it a full circle back to exactly where it was, and undoes`,!f.length&&!(pg.errs.length>e0),f.concat(pg.errs.slice(e0)).join('; ')));
       /* duplicate: the Details Duplicate button (text and measurement have it too) */
       {const f=[];const e1=pg.errs.length;await selectObj(pg,id);const n0=await ev(pg,()=>window.__osp.S().objs.length);const ids0=await ev(pg,()=>window.__osp.S().objs.map(o=>o.id));
         const btn=loc_('#p-sel [data-act=dup]');if(!await cnt(pg,btn))f.push('no Duplicate button');else await clickEl(pg,btn);
