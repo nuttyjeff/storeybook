@@ -5,7 +5,7 @@ writes a report page.
 
 | Command | When | Takes (this container) | Runs |
 |---|---|---|---|
-| `npm run kit` | after every build; on every push (GitHub) | about 10 min | build, load, old plan files, every shipped feature, **every function**, **random input with injected faults** (desktop), screenshots, speed, deploy |
+| `npm run kit` | after every build; on every push (GitHub) | about 10 min | build, load, old plan files, every shipped feature, **every function**, two windows in sync, **random input with injected faults** (desktop), screenshots, speed, deploy |
 | `npm run kit:standard` | before pushing a feature | about 26 min | the above + rules, bad input, simulated users, detection, random input and faults on desktop and iPad, the device checks with SketchUp keys on (desktop and iPad) |
 | `npm run kit:full` | before a release | about 60 min | everything: the device checks with StoreyBook keys and with SketchUp keys on every device size, random input and faults on desktop, iPad and iPhone |
 
@@ -19,6 +19,7 @@ The times are printed in each report; `test/release/out/kit-history.json` keeps 
 | smoke | one check for every feature that has shipped (add one per backlog item; never delete one) |
 | **functions** | **every function a person can reach**, run once through the real interface in a fresh browser: every Search command, every documented shortcut with StoreyBook keys and with SketchUp keys, every right-click entry (empty ground, desk, two desks, group, room, wall, door, both key sets), every Settings control (and settings survive a reload). Each must raise no error and change something visible |
 | **chaos** | **random real input** (taps, drags, keys, every visible control, odd values typed into fields) **with faults injected**: storage full, the browser database refusing writes, the network down, the clipboard refused, the 3D graphics lost, the window resized, the page frozen or hidden, a gesture cancelled, a modifier key stuck, garbage pasted or dropped, key storms, very long text. After every action: no page error, the plan still saves and loads, no NaN, no duplicate ids, no dialog without a way out. After every fault: the app draws, saves and stores again. At the end, undo everything gives back the start and redo everything the end. **A new random seed every run**, so each run explores new ground |
+| sync | two windows on one plan: a change in one reaches the other, changes made in both at once are both kept, Undo takes back the latest change from either window, tabs opened and closed in one follow in the other, the clipboard works across windows, a busy window takes the change once it is free |
 | rules, except, users | rules that hold after every action; broken files, bad CSVs and garbage AI answers; five simulated people doing whole jobs |
 | matrix, matrix-su | every basic action on every device and view, with StoreyBook keys and again with SketchUp keys (ids end in `@su`); every library item placed |
 | detect, visual, perf | floor plan detection, screenshots against the accepted ones, speed against the recorded numbers |

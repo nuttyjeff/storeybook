@@ -20,7 +20,7 @@ jobs:
         run: |
           SMALL='[
             {"name":"core","args":"--only=build,load,golden,smoke,detect,visual,deploy","files":"","dev":""},
-            {"name":"functions-chaos","args":"--only=build,functions,chaos","files":"","dev":""},
+            {"name":"functions-chaos","args":"--only=build,functions,sync,chaos","files":"","dev":""},
             {"name":"phone-3d-data","args":"--only=matrix","files":"phone2d,view3d,data","dev":""},
             {"name":"tablet-views","args":"--only=matrix","files":"tablet-desktop,views-building","dev":""},
             {"name":"objects-edit","args":"--only=matrix","files":"objects,edit-create","dev":""},
