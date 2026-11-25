@@ -212,6 +212,8 @@ export async function fuzzOne(b,kind,seed,N,add,opt={}){
       await ev(pg,()=>{document.activeElement&&document.activeElement.blur&&document.activeElement.blur();document.querySelectorAll('.pop').forEach(p=>p.hidden=true);window.__osp.toastOff()})};
     const eFz=pg.errs.length;await tidy();
     let back=true;const cur=await ev(pg,()=>window.__osp.curTab().id);
+    /* a session that closed the tab it started in took that tab's undo history with it (by design): there is nothing to walk back */const gone=cur!==tab0&&!(await ev(pg,t=>window.__osp.tabs().some(x=>x.id===t),tab0));
+    if(gone){const why='the random session closed the tab it started in, and its undo history with it: nothing to undo back to';add(P+'undo',`${S} fuzz: ${INVN.undo}`,true,{seed,skipped:why});add(P+'redo',`${S} fuzz: ${INVN.redo}`,true,{seed,skipped:why});add(P+'clean',`${S} fuzz: undo / redo phase had no console errors`,true,{seed,skipped:why});return}
     if(cur!==tab0){try{await press(pg,`#ptabs [data-tab="${tab0}"] .nm`)}catch(e){back=false}back=back&&await waitF(pg,t=>window.__osp.curTab().id===t,tab0,3000)}
     /* the end plan is the start tab's plan: if the session wandered into another tab, undo / redo history belongs to each tab */
     const endT=back?await canon(pg):end;

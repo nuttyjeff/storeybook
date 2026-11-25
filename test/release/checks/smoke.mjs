@@ -1,5 +1,5 @@
 /* layer 4: one check per shipped feature. Add a row here whenever a backlog item ships; never delete one. */
-import {openApp,row,click,to3D,to2D,scr,touch} from '../lib.mjs';
+import {openApp,row,click,to3D,to2D,scr,touch,ENGINE} from '../lib.mjs';
 export const name='smoke';
 const ev=(pg,fn,arg)=>pg.evaluate(fn,arg);
 const n=pg=>ev(pg,()=>window.__osp.S().objs.length);
@@ -114,7 +114,7 @@ async function desktop(b){
   {const r=await ev(pg,async()=>{const o=window.__osp,S=o.S(),q=s=>document.querySelector(s),w=t=>new Promise(r=>setTimeout(r,t));const room=S.objs.find(x=>x.t==='room');o.setZoneLayer(false);
      o.setSel([room.id]);q('[data-tab=sel]').click();await w(100);const btn=q('#p-sel [data-zone=red]');if(btn)btn.click();await w(150);
      const on1=o.P().layers.secz===true,drawn=!!q('#L-egress .sz-red'),leg=!q('#sz-legend').hidden,zone=o.S().objs.find(x=>x.id===room.id).zone;
-     q('[data-tab=secz]').click();await w(80);const cbx=q('#p-secz [data-szshow=red]');cbx.click();await w(100);const oneOff=!q('#L-egress .sz-red')&&!q('#sz-legend').hidden;q('#p-secz [data-szshow=red]').click();await w(100);const oneOn=!!q('#L-egress .sz-red');const hdr=q('#b-ai');hdr.click();await w(80);const aiOpen=!q('#ai-panel').hidden;hdr.click();await w(60);const aiShut=q('#ai-panel').hidden;q('[data-tab=sel]').click();
+     q('[data-tab=secz]').click();await w(80);const cbx=q('#p-secz [data-szshow=red]');cbx.click();await w(100);const oneOff=!q('#L-egress .sz-red')&&!q('#sz-legend').hidden;q('#p-secz [data-szshow=red]').click();/* the zone is drawn on the next frame or two; a slower engine needs longer than a fixed 100 ms */let oneOn=false;for(let i=0;i<20&&!oneOn;i++){await w(50);oneOn=!!q('#L-egress .sz-red')}const hdr=q('#b-ai');hdr.click();await w(80);const aiOpen=!q('#ai-panel').hidden;hdr.click();await w(60);const aiShut=q('#ai-panel').hidden;q('[data-tab=sel]').click();
      q('#sz-legend [data-sz=off]').click();await w(100);const off=!q('#L-egress .sz-red')&&q('#sz-legend').hidden;o.undo();await w(100);const und=o.S().objs.find(x=>x.id===room.id).zone;o.redo();await w(50);o.setSel([]);
      return {btn:!!btn,zone,on1,drawn,leg,off,und,oneOff,oneOn,aiOpen,aiShut}});
    add(R,'s-zones','security zones: Red set from Selection shows on the plan with a legend, the legend hides it, undo clears the zone',r.btn&&r.zone==='red'&&r.on1&&r.drawn&&r.leg&&r.off&&r.und==null&&r.oneOff&&r.oneOn&&r.aiOpen&&r.aiShut,r)}/* 4.6.1 later the same day: each zone colour has its own Show box; the header AI button opens and closes the AI panel */
@@ -905,12 +905,12 @@ async function phone(b){
   /* second finger while dragging = axis lock; lifting it frees the move */
   {await click(pg,'#mbar [data-m=select]');await ev(pg,()=>{window.__osp.V.k*=1.6;window.__osp.render()});await pg.waitForTimeout(100);
    const it=await ev(pg,()=>{const S=window.__osp.S();for(const it of S.objs.filter(o=>o.t==='item'&&/^WS/.test(o.code))){const el=document.querySelector(`[data-id="${it.id}"]`);if(!el)continue;const r=el.getBoundingClientRect();if(r.top>140&&r.bottom<innerHeight-160&&r.left>20&&r.right<innerWidth-20)return {id:it.id,x:r.left+r.width/2,y:r.top+r.height/2,ox:it.x,oy:it.y}}return null});
-   if(!it)add(R,'p-axis-hold','phone: second finger locks the axis (no desk on screen to test)',false,'no visible desk');else{
+   /* two-finger and pull gestures need real touch input, which only Chromium's input channel gives the tests; they run there */if(ENGINE==='chromium')if(!it)add(R,'p-axis-hold','phone: second finger locks the axis (no desk on screen to test)',false,'no visible desk');else{
    const pos=()=>ev(pg,id=>{const o=window.__osp.S().objs.find(x=>x.id===id);return [o.x-window.__it.ox,o.y-window.__it.oy]},it.id);await ev(pg,it=>{window.__it=it},it);
    await t.T('touchStart',[[it.x,it.y,1]]);for(let i=1;i<=6;i++){await t.T('touchMove',[[it.x+6*i,it.y+4*i,1]]);await pg.waitForTimeout(16)}const free=await pos();
    await t.T('touchStart',[[it.x+36,it.y+24,1],[60,300,2]]);for(let i=7;i<=16;i++){await t.T('touchMove',[[it.x+6*i,it.y+4*i,1],[60,300,2]]);await pg.waitForTimeout(16)}const locked=await pos();
    await t.T('touchEnd',[[60,300,2]]);for(let i=17;i<=22;i++){await t.T('touchMove',[[it.x+6*i,it.y+4*i,1]]);await pg.waitForTimeout(16)}const freed=await pos();await t.T('touchEnd',[[it.x+132,it.y+88,1]]);await pg.waitForTimeout(80);await ev(pg,()=>window.__osp.undo());
-   add(R,'p-axis-hold','phone: a second finger locks the drag to one axis; lifting it frees the move; the view does not pan',free[1]!==0&&locked[1]===0&&locked[0]>free[0]&&freed[1]!==0,{free,locked,freed})}
+   /* two-finger and pull gestures need real touch input, which only Chromium's input channel gives the tests; they run there */if(ENGINE==='chromium')add(R,'p-axis-hold','phone: a second finger locks the drag to one axis; lifting it frees the move; the view does not pan',free[1]!==0&&locked[1]===0&&locked[0]>free[0]&&freed[1]!==0,{free,locked,freed})}
    await ev(pg,()=>{window.__osp.V.k/=1.6;window.__osp.render()})}
   /* 3D on phones: capped pixel ratio, cheaper shadows; walking drops to 1x and restores */
   {await to3D(pg);const r=await ev(pg,()=>{const T=window.__osp.T3();return {pr:T.renderer.getPixelRatio(),lowGPU:T.lowGPU,shadow:T.dir.shadow.mapSize.x,dpr:devicePixelRatio}});await to2D(pg);
@@ -944,7 +944,7 @@ async function phone(b){
    const pulls={};for(const [slot,sel] of [['lib','#d-lib'],['draw','#msheet'],['insp','#d-insp']]){if(slot==='insp')await pick();await click(pg,`#mbar [data-m=${slot}]`);await pg.waitForTimeout(300);const o=await vis(sel);const b=await box(sel);await t.drag(b,[b[0],b[1]+170],10);await pg.waitForTimeout(400);pulls[slot]=[o,await vis(sel)]}
    await click(pg,'#mbar [data-m=lib]');await pg.waitForTimeout(300);const sc=await ev(pg,()=>{const d=document.querySelector('#d-lib');const c=[d,...d.querySelectorAll('*')].find(e=>e.scrollHeight>e.clientHeight+40&&/(auto|scroll)/.test(getComputedStyle(e).overflowY));if(!c)return false;c.scrollTop=200;return c.scrollTop>0});
    const b=await box('#d-lib');await t.drag(b,[b[0],b[1]+170],10);await pg.waitForTimeout(400);const stay=await vis('#d-lib');await click(pg,'#mbar [data-m=select]');await pg.waitForTimeout(200);
-   add(R,'p-sheet-pull','phone: pulling down from the middle of Library, Draw or Details closes it; a scrolled list scrolls instead',Object.values(pulls).every(([o,a])=>o&&!a)&&sc&&stay,{pulls,scrolled:sc,stillOpenWhenScrolled:stay})}
+   /* two-finger and pull gestures need real touch input, which only Chromium's input channel gives the tests; they run there */if(ENGINE==='chromium')add(R,'p-sheet-pull','phone: pulling down from the middle of Library, Draw or Details closes it; a scrolled list scrolls instead',Object.values(pulls).every(([o,a])=>o&&!a)&&sc&&stay,{pulls,scrolled:sc,stillOpenWhenScrolled:stay})}
   add(R,'p-phone-clean','phone smoke left no console errors',e0()===0,pg.errs.slice(0,5));
   await pg.ctx.close();return R}
 
