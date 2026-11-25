@@ -13,11 +13,11 @@
 */
 import fs from 'fs';import path from 'path';import {browser,appVersion,ROOT,flushShots,SHOT_DIR} from './lib.mjs';
 const args=process.argv.slice(2);const flag=f=>args.includes(f);/* the last --only wins, so the kit's own list can be narrowed: npm run kit -- --only=build,smoke */const only=(args.filter(a=>a.startsWith('--only=')).pop()||'').slice(7).split(',').filter(Boolean);
-const LAYERS=['build','load','golden','smoke','rules','except','users','chaos','functions','matrix','matrix-su','detect','visual','perf','deploy'];
+const LAYERS=['build','load','golden','smoke','rules','except','users','chaos','functions','sync','matrix','matrix-su','detect','visual','perf','deploy'];
 /* layers that run the whole matrix list unless --only names them */const OPT_IN=['matrix-su'];
 /* the SketchUp-keys pass: every slice where keys, snapping, selection or the new tools can differ. Not phone2d (phone only) or layout (geometry) */
 const SU_DEFAULT='edit-create,tablet-desktop,views-building,shell,view3d,data,objects,robust';
-const RETRY=new Set(['load','golden','smoke','rules','except','users','chaos','functions','detect','visual','perf']);
+const RETRY=new Set(['load','golden','smoke','rules','except','users','chaos','functions','sync','detect','visual','perf']);
 /* layers that can run single checks again (SB_CHECK): only the failed ones are re-run */const SINGLE=new Set(['functions']);
 const ver=appVersion();console.log(`StoreyBook release gate · v${ver} · ${new Date().toISOString()}\n`);
 const known=(()=>{try{return JSON.parse(fs.readFileSync(path.join(ROOT,'test/release/known.json'),'utf8')).map(k=>Object.assign(k,{re:new RegExp(k.id)}))}catch(e){return[]}})();

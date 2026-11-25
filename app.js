@@ -304,10 +304,20 @@ let asT=null;
 /* each save is tied to the tab it came from, so switching tabs mid-way can never write one plan over another */
 /* autosave: every change is written to this browser's local storage (not the cache) about half a second later, one entry per tab.
    Returns 'full', 'lite' (saved without the drawing, which did not fit) or false (nothing saved) */
-function saveTabData(t,plan){try{syncFloorOut(plan)}catch(e){console.error(e)}PLANS.put(plan);const key=t?'osk-tab-'+t.id:'osk-plan';const txt=JSON.stringify(plan);if(store.set(key,txt))return'full';
-  if(plan.underlay&&plan.underlay.src&&store.set(key,JSON.stringify(Object.assign({},plan,{underlay:Object.assign({},plan.underlay,{src:null})}))))return'lite';return false}
+/* SYNC_BASE: what each tab's entry held when this window last wrote or read it, the starting point for merging another window's change */
+var SYNC_BASE={};
+/* each stored copy carries its own revision and the revision it was made from, and each window remembers the last copies it has seen,
+   so a change from another window is always merged against the version both started from (Chrome hands storage between windows
+   with a delay, so two windows can each save before seeing the other's save) */
+var SYNC_REV={},SYNC_HIST={};
+function syncSeen(k,rev,txt){const h=SYNC_HIST[k]||(SYNC_HIST[k]=new Map());h.set(rev,txt);while(h.size>24)h.delete(h.keys().next().value)}
+function saveTabData(t,plan){/* another window wrote this plan since this one last read it: take its changes in first, or this save would write over them */
+  if(t&&typeof syncApply==='function'&&!store.off){const k='osk-tab-'+t.id,now=store.get(k);if(now&&SYNC_BASE[k]!=null&&now!==SYNC_BASE[k]){try{syncApply(t,now)}catch(e){console.error('sync',e)}if(t===curTab&&!AI.pending)plan=S;else if(t!==curTab)plan=t.S}}
+  try{syncFloorOut(plan)}catch(e){console.error(e)}PLANS.put(plan);const key=t?'osk-tab-'+t.id:'osk-plan';const sy=t?{_sync:{rev:uid(),par:SYNC_REV[key]||null}}:{};const done=txt=>{if(t){SYNC_BASE[key]=txt;SYNC_REV[key]=sy._sync.rev;syncSeen(key,sy._sync.rev,txt)}};
+  const txt=JSON.stringify(Object.assign({},plan,sy));if(store.set(key,txt)){done(txt);return'full'}
+  if(plan.underlay&&plan.underlay.src){const lite=JSON.stringify(Object.assign({},plan,{underlay:Object.assign({},plan.underlay,{src:null})},sy));if(store.set(key,lite)){done(lite);return'lite'}}return false}
 const AS={state:'idle',at:0,fileAt:0,fileNote:''};
-function autosave(){clearTimeout(asT);const t=curTab,plan=S;AS.state='pending';setStatus();asT=setTimeout(()=>{/* an AI preview that has not been accepted is not autosaved: the plan as it was before is */const r=saveTabData(t,t===curTab&&AI.pending?AI.pending.pre.S:plan);if(t===curTab){AS.state=r||'fail';AS.at=Date.now();
+function autosave(){clearTimeout(asT);const t=curTab,plan=S;AS.state='pending';setStatus();asT=setTimeout(function go(){/* while this window is in the middle of something, a change from another window cannot be merged in yet, so the save waits for it */if(typeof syncBusy==='function'&&t===curTab&&syncBusy(t)){const now=store.get('osk-tab-'+t.id);if(now&&SYNC_BASE['osk-tab-'+t.id]!=null&&now!==SYNC_BASE['osk-tab-'+t.id]){asT=setTimeout(go,400);return}}/* an AI preview that has not been accepted is not autosaved: the plan as it was before is */const r=saveTabData(t,t===curTab&&AI.pending?AI.pending.pre.S:plan);if(t===curTab){AS.state=r||'fail';AS.at=Date.now();
     /* say it once when the browser stops taking autosaves (My plans in IndexedDB still keeps a copy) */
     if(AS.state==='fail'&&!AS.warned){AS.warned=true;toast('Browser storage is full: this plan is no longer autosaved here. My plans still keeps a copy; Save to a file to be safe.')}else if(AS.state!=='fail')AS.warned=false}setStatus()},600)}
 const ago=t=>{const d=Math.round((Date.now()-t)/1000);return d<5?'just now':d<60?d+' s ago':d<3600?Math.round(d/60)+' min ago':new Date(t).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};
@@ -324,6 +334,7 @@ setInterval(()=>{if(AS.state==='full'||AS.state==='lite')setStatus()},15000);
 function renderSavePop(){const kb=Math.round(storageUse()/1024),pct=Math.min(100,Math.round(kb/5120*100));const st=AS.state;
   $('#pop-save').innerHTML=`<h3 style="margin:0 0 6px">How saving works</h3>
   <p style="margin:0 0 6px"><b>Autosave</b> writes every change to this browser's local storage about half a second later, one copy per tab. Close the browser and the tabs come back as you left them.</p>
+  <p style="margin:0 0 6px"><b>Several windows</b> of StoreyBook in this browser show the same tabs and stay in step: a change in one appears in the others within about a second, and changes made in two windows at once are both kept. Undo takes back the latest change, whichever window made it.</p>
   <p class="muted" style="margin:0 0 6px">It stays on this computer, in this browser only. Clearing browsing data, a private window or a work-laptop clean-up removes it, and it is not encrypted.</p>
   <p style="margin:0 0 6px"><b>My plans</b> (in the menu) lists every plan this browser has kept, including ones whose tab you closed. Open, duplicate, rename or delete them there.</p>
   <p style="margin:0 0 6px"><b>Save</b> writes a .json file. That is your real record: keep it on approved storage, share it, open it on another computer.</p>
@@ -6066,7 +6077,7 @@ function closeTab(t){
   if(isDirty&&live.objs.length&&!confirm(`"${live.name}" has changes that are not saved to a file. Close the tab anyway?`))return;
   if(t===curTab)leaveRoof();
   store.del('osk-tab-'+t.id);const i=tabs.indexOf(t);tabs.splice(i,1);if(AI.wait&&AI.wait.tab===t){const w=AI.wait;AI.wait=null;w.rej(new Error(AI_CLOSED))}
-  if(!tabs.length){const n={id:uid(),S:blankPlan(),sel:new Set(),past:[],future:[],dirty:false,V:null};tabs.push(n);applyTab(n);autosave();return}
+  if(!tabs.length){const n={id:uid(),S:blankPlan(),sel:new Set(),past:[],future:[],dirty:false,V:null};tabs.push(n);/* stored before the tab list names it, so other windows can open it */saveTabData(n,n.S);applyTab(n);return}
   if(t===curTab)applyTab(tabs[Math.min(i,tabs.length-1)]);else{renderTabs();saveTabIndex()}
 }
 function saveTabIndex(){store.set('osk-tabs',JSON.stringify({ids:tabs.map(t=>t.id),active:curTab&&curTab.id}))}
@@ -6085,11 +6096,11 @@ $('#ptabs').addEventListener('click',e=>{const c=e.target.closest('[data-tab-clo
     if(prev&&prev.classList.contains('ptab')){const p=prev.getBoundingClientRect();if(mid<p.left+p.width/2){bar.insertBefore(el,prev);td.x0-=p.width+4}}
     if(next&&next.classList.contains('ptab')){const n=next.getBoundingClientRect();if(mid>n.left+n.width/2){bar.insertBefore(next,el);td.x0+=n.width+4}}
     el.style.transform=`translateX(${e.clientX-td.x0}px)`},true);
-  const end=e=>{if(!td||e.pointerId!==td.pid)return;const was=td;td=null;if(!was.on)return;tabDragging=false;was.el.classList.remove('dragging');was.el.style.transform='';const order=[...bar.querySelectorAll('.ptab')].map(x=>x.dataset.tab);tabs.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));tabNoClick=true;setTimeout(()=>tabNoClick=false,0);renderTabs()};
+  const end=e=>{if(!td||e.pointerId!==td.pid)return;const was=td;td=null;if(!was.on)return;tabDragging=false;was.el.classList.remove('dragging');was.el.style.transform='';const order=[...bar.querySelectorAll('.ptab')].map(x=>x.dataset.tab);tabs.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));tabNoClick=true;setTimeout(()=>tabNoClick=false,0);renderTabs();saveTabIndex()};
   addEventListener('pointerup',end,true);addEventListener('pointercancel',end,true);
   bar.addEventListener('click',e=>{if(tabNoClick){e.stopPropagation();e.preventDefault()}},true)}
 /* keyboard and search alternative to dragging a tab (WCAG 2.5.7) */
-function tabShift(d){const i=tabs.indexOf(curTab),j=i+d;if(i<0||j<0||j>=tabs.length)return toast(d<0?'This plan is already the first tab':'This plan is already the last tab');tabs.splice(j,0,tabs.splice(i,1)[0]);renderTabs();const el=$('#ptabs .ptab.on');if(el)el.focus();toast(`${S.name||'Plan'} moved to tab ${j+1} of ${tabs.length}`)}
+function tabShift(d){const i=tabs.indexOf(curTab),j=i+d;if(i<0||j<0||j>=tabs.length)return toast(d<0?'This plan is already the first tab':'This plan is already the last tab');tabs.splice(j,0,tabs.splice(i,1)[0]);renderTabs();saveTabIndex();const el=$('#ptabs .ptab.on');if(el)el.focus();toast(`${S.name||'Plan'} moved to tab ${j+1} of ${tabs.length}`)}
 $('#ptabs').addEventListener('keydown',e=>{const t=e.target.closest('.ptab');if(!t)return;if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&e.altKey){e.preventDefault();e.stopPropagation();if(t.classList.contains('on'))tabShift(e.key==='ArrowLeft'?-1:1)}else if((e.key==='Enter'||e.key===' ')&&e.target===t){e.preventDefault();switchTab(tabs.find(x=>x.id===t.dataset.tab))}});
 $('#ptabs').addEventListener('auxclick',e=>{if(e.button!==1)return;const t=e.target.closest('[data-tab]');if(t){e.preventDefault();closeTab(tabs.find(x=>x.id===t.dataset.tab))}});
 
@@ -6101,7 +6112,7 @@ let bootNotes=[];
   if(idx&&Array.isArray(idx.ids))idx.ids.forEach(id=>{let raw=null;try{raw=JSON.parse(store.get('osk-tab-'+id)||'null')}catch(e){}const pl=raw&&Array.isArray(raw.objs)&&load(raw);if(pl)tabs.push({id,S:pl,sel:new Set(),past:[],future:[],dirty:true,V:null})});
   if(!tabs.length){let saved=null;try{saved=JSON.parse(store.get('osk-plan')||'null')}catch(e){}const pl=saved&&Array.isArray(saved.objs)&&load(saved);if(pl)tabs.push({id:uid(),S:pl,sel:new Set(),past:[],future:[],dirty:true,V:null})}
   let fresh=false;if(!tabs.length){S=blankPlan();tabs.push({id:uid(),S,sel:new Set(),past:[],future:[],dirty:false,V:null});fresh=true}
-  tabs.forEach(t=>{if(!store.get('osk-tab-'+t.id))saveTabData(t,t.S)});
+  tabs.forEach(t=>{const k='osk-tab-'+t.id,txt=store.get(k);delete t.S._sync;if(!txt)saveTabData(t,t.S);else{SYNC_BASE[k]=txt;try{const r=(JSON.parse(txt)._sync||{}).rev;if(r){SYNC_REV[k]=r;syncSeen(k,r,txt)}}catch(e){}}});
   applyTab(tabs.find(t=>idx&&t.id===idx.active)||tabs[0]);
   window.addEventListener('pagehide',()=>{if(curTab&&!store.off){clearTimeout(asT);saveTabData(curTab,AI.pending?AI.pending.pre.S:S)}});
   $('#status').addEventListener('click',e=>{e.stopPropagation();const p=$('#pop-save'),open=p.hidden;closePops();if(!open)return;renderSavePop();const r=e.currentTarget.getBoundingClientRect();p.style.left=Math.max(8,r.left)+'px';p.style.top=(r.bottom+6)+'px';p.hidden=false});
@@ -6109,6 +6120,76 @@ let bootNotes=[];
   $('#m-wipe').addEventListener('click',()=>{closePops();wipeLocal()});
 }
 setTool('select');setStatus();renderInspector();
+/* ================= several windows on one plan =================
+   Every window of StoreyBook in this browser shows the same tabs and the same plans. A change made in one window is written to this
+   browser's storage by autosave; the others hear of it (the storage event) and merge it in, object by object, so changes made in two
+   windows at once are both kept. A change from another window is a normal step: Undo in any window takes back the latest change,
+   whichever window made it (Jeff, 25 Nov 2026). The floor, the selection, the view and the open panels stay each window's own.
+   A change waits while this window is in the middle of something (a finger or button down, an operation in hand, typing, the roof,
+   an AI preview) and goes in as soon as it is free. Settings, the library, room templates and the clipboard follow too. */
+const SYNC={q:new Map(),down:new Set(),t:null,said:0};
+/* three-way merge of plain JSON: what this window had last agreed with the others (b), what it has now (m), what another window wrote (t).
+   Lists of things with ids merge per id; everything else takes whichever side changed it, and the other window's version when both did */
+const syncIdList=a=>Array.isArray(a)&&a.every(x=>x&&typeof x==='object'&&(typeof x.id==='string'||typeof x.id==='number'))&&new Set(a.map(x=>x.id)).size===a.length;
+function syncMerge(b,m,t){const sb=JSON.stringify(b),sm=JSON.stringify(m),st=JSON.stringify(t);if(sm===sb||sm===st)return t;if(st===sb)return m;
+  if(syncIdList(m)&&syncIdList(t)&&(b===undefined||syncIdList(b))){const B=new Map((b||[]).map(x=>[x.id,x])),M=new Map(m.map(x=>[x.id,x])),T=new Map(t.map(x=>[x.id,x])),out=[];
+    t.forEach(x=>{if(M.has(x.id))out.push(syncMerge(B.get(x.id),M.get(x.id),x));else if(!B.has(x.id)||JSON.stringify(B.get(x.id))!==JSON.stringify(x))out.push(x)/* added there, or changed there after this window deleted it */});
+    m.forEach(x=>{if(T.has(x.id))return;if(!B.has(x.id)||JSON.stringify(B.get(x.id))!==JSON.stringify(x))out.push(x)/* added here, or changed here after the other window deleted it */});return out}
+  const obj=v=>v&&typeof v==='object'&&!Array.isArray(v);
+  if(obj(m)&&obj(t)&&(b===undefined||obj(b))){const out={};new Set([...Object.keys(m),...Object.keys(t)]).forEach(k=>{const v=syncMerge(b?b[k]:undefined,m[k],t[k]);if(v!==undefined)out[k]=v});return out}
+  return t}
+/* a plan as it is compared: its active floor written out into the building (objs is only a view of it) and the drawing's picture left out */
+function syncNorm(p){const q=clone(p);delete q.objs;delete q._sync;if(q.underlay)q.underlay=Object.assign({},q.underlay,{src:null});return q}
+function syncBusy(t){if(t!==curTab)return false;if(SYNC.down.size||roofMode||AI.pending)return true;if(typeof SU!=='undefined'&&SU&&suBusy())return true;
+  const a=document.activeElement;return !!(a&&a.matches&&a.matches('input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),textarea,[contenteditable=true]'))}
+function syncApply(t,text){
+  let raw;try{raw=JSON.parse(text)}catch(e){return}if(!raw||!Array.isArray(raw.objs))return;
+  const key='osk-tab-'+t.id,sy=raw._sync||null,h=SYNC_HIST[key];delete raw._sync;
+  /* already seen (this window's own save, or one merged in before) */if(sy&&sy.rev&&(sy.rev===SYNC_REV[key]||h&&h.has(sy.rev)))return;
+  let theirs;try{theirs=Object.assign(blankPlan(),migratePlan(raw).plan)}catch(e){return}
+  const cur=t===curTab,plan=cur?S:t.S;try{syncFloorOut(plan)}catch(e){}
+  const mine=syncNorm(plan),bt=sy&&sy.par&&h&&h.get(sy.par)||SYNC_BASE[key];let base;try{base=bt?syncNorm(JSON.parse(bt)):mine}catch(e){base=mine}
+  const merged=syncMerge(base,mine,syncNorm(theirs));SYNC_BASE[key]=text;if(sy&&sy.rev){SYNC_REV[key]=sy.rev;syncSeen(key,sy.rev,text)}
+  /* the floor on screen is this window's own */if(merged.bld&&mine.bld&&Array.isArray(merged.bld.levels)&&merged.bld.levels.some(l=>l.id===mine.bld.active))merged.bld.active=mine.bld.active;
+  if(JSON.stringify(merged)===JSON.stringify(mine))return;
+  /* the drawing under the plan: the other window's picture, or this one's if it is the same drawing (a save too big for storage leaves the picture out) */
+  if(merged.underlay){const u=merged.underlay,src=theirs.underlay&&theirs.underlay.uid===u.uid&&theirs.underlay.src||plan.underlay&&plan.underlay.uid===u.uid&&plan.underlay.src||underCache[u.uid]||null;u.src=src;if(u.uid&&src)underCache[u.uid]=src}
+  const into=p=>{Object.keys(p).forEach(k=>{if(!(k in merged))delete p[k]});Object.assign(p,merged);syncFloorIn(p)};
+  if(cur){pushPast(snapState());future=[];into(S);restoreState(snapState())/* redraws everything and autosaves the merged plan, so all windows end up the same */;renderInspector();updateHint()}
+  else{const keepS=S,keepR=roofMode;let snap=null;try{S=t.S;roofMode=false;snap=snapState()}finally{S=keepS;roofMode=keepR}t.past=t.past||[];t.past.push(snap);t.future=[];into(t.S);t.dirty=true;
+    if(JSON.stringify(syncNorm(t.S))!==JSON.stringify(syncNorm(theirs)))saveTabData(t,t.S);renderTabs()}
+  if(Date.now()-SYNC.said>15000){SYNC.said=Date.now();toast(cur?'Updated with changes from another window':`"${(t.S||S).name}" was changed in another window`)}}
+function syncTabs(){
+  let idx=null;try{idx=JSON.parse(store.get('osk-tabs')||'null')}catch(e){}if(!idx||!Array.isArray(idx.ids))return;const ids=idx.ids;
+  if(ids.length===tabs.length&&ids.every((id,i)=>tabs[i].id===id))return;
+  /* tabs opened in another window */
+  ids.forEach(id=>{if(tabs.some(t=>t.id===id))return;const txt=store.get('osk-tab-'+id);let raw=null;try{raw=JSON.parse(txt||'null')}catch(e){}if(!raw||!Array.isArray(raw.objs))return;
+    const sy=raw._sync;delete raw._sync;let pl;try{pl=Object.assign(blankPlan(),migratePlan(raw).plan)}catch(e){return}SYNC_BASE['osk-tab-'+id]=txt;if(sy&&sy.rev){SYNC_REV['osk-tab-'+id]=sy.rev;syncSeen('osk-tab-'+id,sy.rev,txt)}tabs.push({id,S:pl,sel:new Set(),past:[],future:[],dirty:false,V:null})});
+  /* tabs closed in another window (only once that window has said so: a tab this window has just opened is not in the list yet) */
+  const gone=tabs.filter(t=>!ids.includes(t.id)&&store.get('osk-tab-'+t.id)==null);let curGone=false;
+  gone.forEach(t=>{if(t===curTab){curGone=true;return}clearTimeout(t.asT);tabs.splice(tabs.indexOf(t),1);delete SYNC_BASE['osk-tab-'+t.id]});
+  tabs.sort((a,b)=>{const i=ids.indexOf(a.id),j=ids.indexOf(b.id);return(i<0?1e9:i)-(j<0?1e9:j)});
+  /* the plan on screen closes only once another tab can take its place: the tab the other window opened instead may not be stored yet, and opening a blank one here would close that one there */
+  if(curGone&&tabs.length>1){const t=curTab,i=tabs.indexOf(t);leaveRoof();clearTimeout(asT);tabs.splice(i,1);delete SYNC_BASE['osk-tab-'+t.id];applyTab(tabs[Math.min(i,tabs.length-1)]);
+    toast(`"${t.S.name||'That plan'}" was closed in another window`)}
+  renderTabs()}
+function syncFlush(){clearTimeout(SYNC.t);SYNC.t=null;for(const[id,list]of[...SYNC.q]){const t=tabs.find(x=>x.id===id);if(!t){SYNC.q.delete(id);continue}if(syncBusy(t))continue;SYNC.q.delete(id);
+    /* every copy another window wrote, in order, then what storage holds now */const now=store.get('osk-tab-'+id);if(now&&!list.includes(now))list.push(now);for(const text of list){try{syncApply(t,text)}catch(e){console.error('sync',e)}}}
+  if(SYNC.q.size)SYNC.t=setTimeout(syncFlush,400)}
+addEventListener('storage',e=>{if(store.off)return;const k=e.key;
+  /* everything cleared in another window: this one must not write it all back */
+  if(k===null||(k==='osk-tabs'&&e.newValue==null)){store.off=true;clearTimeout(asT);toast('StoreyBook was cleared in another window. Reloading…');setTimeout(()=>location.reload(),800);return}
+  try{
+    if(k==='osk-tabs'){syncTabs();return}
+    if(k.startsWith('osk-tab-')){if(e.newValue==null)return;const id=k.slice(8);if(!tabs.some(t=>t.id===id)){syncTabs();return}{const l=SYNC.q.get(id)||[];l.push(e.newValue);SYNC.q.set(id,l)}syncFlush();return}
+    if(k==='osk-prefs'&&e.newValue){Object.assign(P,JSON.parse(e.newValue));render();return}
+    if(k==='osk-lib'&&e.newValue){LIB=libFromCSV(e.newValue);try{renderLib()}catch(x){}return}
+    if(k==='osk-rtpl'){const u=JSON.parse(e.newValue||'[]');if(Array.isArray(u))UTPL=u.filter(t=>t&&t.code&&Array.isArray(t.pts)&&Array.isArray(t.items));return}
+    if(k==='osk-clip'){clip=null/* what was copied last, in any window, is what pastes */;return}
+  }catch(err){console.error('sync',err)}});
+addEventListener('pointerdown',e=>SYNC.down.add(e.pointerId),true);
+{const up=e=>{SYNC.down.delete(e.pointerId);if(SYNC.q.size&&!SYNC.down.size)setTimeout(syncFlush,0)};addEventListener('pointerup',up,true);addEventListener('pointercancel',up,true);addEventListener('blur',()=>SYNC.down.clear())}
+document.addEventListener('focusout',()=>{if(SYNC.q.size)setTimeout(syncFlush,50)});
 document.title=`StoreyBook ${APP_VERSION}${APP_FORK?' ('+APP_FORK+')':''}${APP_TEST?' · '+APP_TEST:''}`;
 /* on the website, a newer build shows a reload banner; the single file skips this */
 if(/^https?:$/.test(location.protocol)){const chk=()=>fetch('version.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&j.v&&j.v!==APP_VERSION){const b=$('#upd');if(b){b.hidden=false;b.querySelector('b').textContent=j.v}}}).catch(()=>{});

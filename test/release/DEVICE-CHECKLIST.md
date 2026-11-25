@@ -39,7 +39,7 @@ Tick each box. Anything that fails: note what you did and what you saw, and it b
 - [ ] **Sun.** 3D › Sun: drag the time; shadows move with it.
 - [ ] **SketchUp keys.** With SketchUp keys on (Settings): R, drag a room; M, click a desk, move, click, type 1000 Enter: it moves exactly 1 m; Space returns to Select.
 - [ ] **Files.** Save to a file, open it in a new tab with ⋮ › Open: identical. Export PNG and DXF from ⋮: the files download and open.
-- [ ] **Two windows.** Open the site in two windows. Change the plan in window A, then reload window B: B shows the change. (The app does not sync open windows live; editing in both at once can lose one side's work.)
+- [ ] **Two windows.** Open the site in two windows side by side. Move a desk in one: it moves in the other within about a second. Move a different desk in each window at the same time: both moves stay, in both. Undo in either window takes back the latest move. Open a tab in one: it opens in the other.
 
 ## Result
 
