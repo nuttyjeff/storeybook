@@ -50,7 +50,8 @@ The report shows:
 - **You added a function:** a new Search command, right-click entry or setting is picked up by the functions layer by itself.
   A new shortcut needs a line in `SBKEY`/`SUKEY` in `checks/functions.mjs` (the layer fails until it has one, so it cannot be missed).
   A new checklist row needs a pattern in `coverage.json` if its checks do not carry the row code in their ids.
-- **Before a release:** `npm run kit:full` must say RELEASE OK (or run the release gate on GitHub, split across machines).
+- **Before a release:** `npm run kit:full` must say RELEASE OK (or run the release gate on GitHub, split across machines), then work through
+  `DEVICE-CHECKLIST.md` on a real iPad with Pencil, iPhone and laptop (about 10 minutes): the things a server browser cannot see.
 - **Narrow a run:** `npm run kit -- --only=build,functions` runs just those layers with the same report.
 
 ## Settings for a run
@@ -68,5 +69,6 @@ The report shows:
 
 - Pictures are taken of the one page in use when a check records its result. When several pages are busy at once no picture is taken
   rather than a wrong one, and a few checks tidy up before recording, so a picture can show the state after the tidy-up.
-- Everything runs in Chromium with a software renderer. Safari and real graphics cards are not covered here.
+- Everything runs in Chromium with a software renderer, plus Safari's engine (WebKit) on GitHub. Real touch, Apple Pencil, on-screen
+  keyboards and real graphics cards are covered by `DEVICE-CHECKLIST.md`, by hand.
 - On GitHub, screenshots are compared with their own baseline (`baseline-ci`, kept in the artifact): fonts there differ from this machine.
