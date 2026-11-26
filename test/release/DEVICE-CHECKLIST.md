@@ -1,8 +1,9 @@
 # Real-device checklist (about 10 minutes, once per release)
 
 The test kit runs every function automatically, but in a browser on a server: no real finger, no Apple Pencil, no real Safari on
-an iPhone or iPad, no real graphics card, no on-screen keyboard. This list covers only those. Do it after `npm run kit:full`
-says RELEASE OK, on the deployed site (or the single file), with a fresh tab.
+an iPhone or iPad, no real graphics card, no on-screen keyboard. This list covers only those. Do it once the release gate on GitHub
+passes, on a copy of the new version the devices can open (a preview link of the site, or the single file on the laptop), in a fresh tab.
+The last section is done on the live site straight after the release.
 
 Tick each box. Anything that fails: note what you did and what you saw, and it becomes a bug (and, where it can be, a new check).
 
@@ -37,9 +38,19 @@ Tick each box. Anything that fails: note what you did and what you saw, and it b
 - [ ] **3D looks right.** Open 3D on the sample office: walls, furniture and floor colours look right, shadows are under the furniture, nothing flickers or is missing. Turn Settings › Smooth edges in 3D on (it reloads): edges are smooth; then off again.
 - [ ] **3D is quick.** Orbiting is smooth. Open a large plan (or duplicate the sample's furniture a few times with Ctrl+D, Ctrl+A first): 3D still opens within about 10 seconds and orbits without long pauses; a note may say it is drawn softer, which is expected.
 - [ ] **Sun.** 3D › Sun: drag the time; shadows move with it.
-- [ ] **SketchUp keys.** With SketchUp keys on (Settings): R, drag a room; M, click a desk, move, click, type 1000 Enter: it moves exactly 1 m; Space returns to Select.
+- [ ] **First open and SketchUp keys.** In a fresh browser profile (or a private window) the "Coming from SketchUp?" card appears; Use SketchUp keys closes it. R, drag a room; M, click a desk, move, click, type 1000 Enter: it moves exactly 1 m; Space returns to Select; Ctrl K opens Search. Settings › Key bindings switches to StoreyBook keys and back.
+- [ ] **Walk from 3D.** In 3D press Walk: the plan asks where to stand with a crosshair. Press Esc: the cursor is the normal arrow again.
 - [ ] **Files.** Save to a file, open it in a new tab with ⋮ › Open: identical. Export PNG and DXF from ⋮: the files download and open.
 - [ ] **Two windows.** Open the site in two windows side by side. Move a desk in one: it moves in the other within about a second. Move a different desk in each window at the same time: both moves stay, in both. Undo in either window takes back the latest move. Open a tab in one: it opens in the other.
+
+## Straight after the release, on the live site (about 3 minutes)
+
+The live site is the only place that holds plans from the previous version, so the upgrade is checked there. 4.6's own copy is never
+changed, so going back to 4.6 stays safe.
+
+- [ ] **Your plans come across.** On a computer where you used 4.6, open the live site (reload any tab already open): a note says your plans and settings were brought across; your open tabs are there, and My plans lists every plan it had.
+- [ ] **iPad and iPhone too.** The same on each device you used 4.6 on.
+- [ ] **Version.** ⋮ › About says StoreyBook 5.0.0, with no "test" or "sketchup" label. A tab still on 4.6 shows the Reload banner within a minute.
 
 ## Result
 
