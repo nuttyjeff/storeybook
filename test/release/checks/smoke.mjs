@@ -1,5 +1,5 @@
 /* layer 4: one check per shipped feature. Add a row here whenever a backlog item ships; never delete one. */
-import {openApp,row,click,to3D,to2D,scr,touch,ENGINE} from '../lib.mjs';
+import {openApp,row,click,to3D,to2D,scr,touch,ENGINE,devFile} from '../lib.mjs';
 export const name='smoke';
 const ev=(pg,fn,arg)=>pg.evaluate(fn,arg);
 const n=pg=>ev(pg,()=>window.__osp.S().objs.length);
@@ -9,6 +9,7 @@ const libClick=(pg,re)=>ev(pg,re=>{const rows=[...document.querySelectorAll('#li
 const ids=[];const add=(R,id,name,pass,detail)=>{if(ids.includes(id))throw new Error('duplicate smoke id '+id);ids.push(id);R.push(row(id,name,pass,detail))};
 
 import http from 'node:http';
+import fs from 'node:fs';
 /* a stand-in for Ollama: lists one model and streams a JSON answer the way /api/chat does */
 function fakeOllama(){return new Promise(res=>{const got=[];const s=http.createServer((q,r)=>{r.setHeader('Access-Control-Allow-Origin','*');r.setHeader('Access-Control-Allow-Headers','*');if(q.method==='OPTIONS'){r.end();return}
   if(q.url==='/api/tags'){r.end(JSON.stringify({models:[{name:'qwen-test:1b'}]}));return}
@@ -948,4 +949,35 @@ async function phone(b){
   add(R,'p-phone-clean','phone smoke left no console errors',e0()===0,pg.errs.slice(0,5));
   await pg.ctx.close();return R}
 
-export async function run(b){ids.length=0;const R=[];R.push(...await desktop(b));R.push(...await phone(b));return R}
+/* upgrade from 4.6: a browser that has 4.6's tabs, settings and My plans opens 5.0.0 and finds them all, and 4.6's copy is untouched */
+export async function from46(b){const R=[];const ctx=await b.newContext({viewport:{width:1400,height:900}});
+  try{const url=devFile(),seedUrl=url.replace(/StoreyBook v[^/]*\.html.*$/,'seed-46.html');fs.writeFileSync(decodeURIComponent(seedUrl.replace('file://','')),'<!doctype html><title>seed</title>');
+    const pg=await ctx.newPage();pg.on('dialog',d=>d.accept().catch(()=>{}));const errs=[];pg.on('pageerror',e=>errs.push('PE:'+e.message));pg.on('console',m=>{if(m.type()==='error')errs.push(m.text())});
+    await pg.goto(seedUrl);
+    const plan=(id,txt,pid)=>JSON.stringify({v:6,name:txt,pid,objs:[{id:id+'t',t:'text',x:1000,y:1000,text:txt}],underlay:null,locked:false,north:0});
+    await pg.evaluate(async([a,c])=>{localStorage.setItem('osp-tabs',JSON.stringify({ids:['old1','old2'],active:'old2'}));localStorage.setItem('osp-tab-old1',a);localStorage.setItem('osp-tab-old2',c);localStorage.setItem('osp-prefs',JSON.stringify({grid:500,snapSize:25}));
+      await new Promise((res,rej)=>{const q=indexedDB.open('storeybook',1);q.onupgradeneeded=()=>q.result.createObjectStore('plans',{keyPath:'pid'});q.onsuccess=()=>{const db=q.result,t=db.transaction('plans','readwrite');t.objectStore('plans').put({pid:'pidStored',name:'Only in My plans',updated:Date.now(),floors:1,objs:1,items:0,rooms:0,thumb:'',size:10,data:JSON.stringify({v:6,name:'Only in My plans',pid:'pidStored',objs:[]})});t.oncomplete=()=>{db.close();res()};t.onerror=()=>rej(t.error)};q.onerror=()=>rej(q.error)})},
+      [plan('a','Plan one from 4.6','pidA'),plan('b','Plan two from 4.6','pidB')]);
+    await pg.goto(url,{waitUntil:'load'});await pg.waitForFunction(()=>window.__osp&&window.__osp.S,{timeout:20000});await pg.waitForTimeout(800);
+    const got=await pg.evaluate(async()=>{const o=window.__osp;const names=o.tabsRaw().map(t=>t===o.curTab()?o.S().name:t.S.name);const rows=await o.PLANS.list();
+      return {names,cur:o.S().name,grid:o.P().grid,snap:o.P().snapSize,myPlans:rows.map(r=>r.name),old:{tabs:localStorage.getItem('osp-tabs'),t1:!!localStorage.getItem('osp-tab-old1'),prefs:localStorage.getItem('osp-prefs')},
+        oldDb:await new Promise(res=>{const q=indexedDB.open('storeybook',1);q.onsuccess=()=>{const g=q.result.transaction('plans').objectStore('plans').count();g.onsuccess=()=>{q.result.close();res(g.result)}};q.onerror=()=>res(-1)}),
+        note:document.body.innerText.includes('brought across')}});
+    add(R,'s-from-46','Upgrade from 4.6: both open plans come back as tabs (the one last open is on screen), the grid and snap settings carry over, My plans lists the plan kept only there, the upgrade says so once, and 4.6\'s own tabs, settings and My plans are left as they were',
+      got.names.includes('Plan one from 4.6')&&got.names.includes('Plan two from 4.6')&&got.cur==='Plan two from 4.6'&&got.grid===500&&got.snap===25&&got.myPlans.includes('Only in My plans')&&got.note&&got.old.t1&&JSON.parse(got.old.tabs).ids.length===2&&JSON.parse(got.old.prefs).grid===500&&got.oldDb===1,got);
+    /* a second start does not copy anything again: no duplicate tabs, and a tab closed in 5.0.0 stays closed */
+    await pg.evaluate(()=>{const o=window.__osp;const t=o.tabsRaw().find(t=>(t===o.curTab()?o.S():t.S).name==='Plan one from 4.6');document.querySelector(`#ptabs [data-tab-close="${t.id}"]`).click()});await pg.waitForTimeout(900);const closed=await pg.evaluate(()=>window.__osp.tabsRaw().length);
+    await pg.reload({waitUntil:'load'});await pg.waitForFunction(()=>window.__osp&&window.__osp.S,{timeout:20000});await pg.waitForTimeout(500);
+    const again=await pg.evaluate(c=>{const o=window.__osp;return {tabsAfterClose:c,names:o.tabsRaw().map(t=>t===o.curTab()?o.S().name:t.S.name),note:document.body.innerText.includes('brought across')}},closed);
+    add(R,'s-from-46-once','Upgrade from 4.6 happens once: after a reload a tab closed in 5.0.0 stays closed, nothing is duplicated and the note does not come back',again.tabsAfterClose===1&&!again.names.includes('Plan one from 4.6')&&again.names.filter(n=>n==='Plan two from 4.6').length===1&&!again.note,again);
+    add(R,'s-from-46-clean','Upgrade from 4.6: no console or page errors',!errs.length,errs.slice(0,3));
+    /* a browser that already used the 5.0.0 test builds keeps them and gains 4.6's tabs; its own settings win */
+    const ctx2=await b.newContext({viewport:{width:1400,height:900}});try{const p2=await ctx2.newPage();p2.on('dialog',d=>d.accept().catch(()=>{}));await p2.goto(seedUrl);
+      await p2.evaluate(([a,c])=>{localStorage.setItem('osk-tabs',JSON.stringify({ids:['new1'],active:'new1'}));localStorage.setItem('osk-tab-new1',c);localStorage.setItem('osk-prefs',JSON.stringify({grid:1000}));
+        localStorage.setItem('osp-tabs',JSON.stringify({ids:['old1'],active:'old1'}));localStorage.setItem('osp-tab-old1',a);localStorage.setItem('osp-prefs',JSON.stringify({grid:500}))},[plan('a','Plan from 4.6','pidA'),plan('n','Plan from a test build','pidN')]);
+      await p2.goto(url,{waitUntil:'load'});await p2.waitForFunction(()=>window.__osp&&window.__osp.S,{timeout:20000});await p2.waitForTimeout(500);
+      const both=await p2.evaluate(()=>{const o=window.__osp;return {names:o.tabsRaw().map(t=>t===o.curTab()?o.S().name:t.S.name),cur:o.S().name,grid:o.P().grid}});
+      add(R,'s-from-46-both','Upgrade from 4.6 in a browser that used the 5.0.0 test builds: the test-build tab stays (and stays on screen), the 4.6 tab is added, and the 5.0.0 settings are kept',both.names.length===2&&both.names.includes('Plan from 4.6')&&both.cur==='Plan from a test build'&&both.grid===1000,both)}finally{await ctx2.close()}
+  }catch(e){add(R,'s-from-46','Upgrade from 4.6 check ran',false,String(e&&e.stack||e).slice(0,400))}
+  finally{await ctx.close()}return R}
+export async function run(b){ids.length=0;const R=[];R.push(...await desktop(b));R.push(...await phone(b));R.push(...await from46(b));return R}
