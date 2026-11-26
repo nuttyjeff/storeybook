@@ -2881,7 +2881,7 @@ function openPlanText(text,handle,name){
     leaveRoof();if(!curUntouched())newTab(blankPlan());S=m.plan;curTab.S=S;past=[];future=[];ensureBld(S);setTimeout(renderFloorUI,0);if(!o.name)S.name=name.replace(/\.json$/i,'');
     if(S.underlay&&S.underlay.src){S.underlay.uid=S.underlay.uid||uid();underCache[S.underlay.uid]=S.underlay.src}
     pdfDoc=null;fileHandle=handle||null;sel.clear();clashDirty=true;$('#pname').value=S.name;syncLock();syncUnder();fit();renderInspector();
-    dirty=!handle;AS.fileNote=handle?'':'opened from '+name;setStatus();
+    dirty=!handle;AS.fileNote=handle?'':'opened from '+name;/* kept in this browser straight away: a file opened and not yet edited comes back on reload, and other windows see it */autosave();setStatus();
     if(m.notes.length)notice('Opened '+name,m.notes,m.fileV<PLAN_V?`Saved with an older version (plan format ${m.fileV}) and upgraded. Save to keep the upgrade.`:'');else toast('Opened '+name);
     if(CAMP.adding){CAMP.adding=false;if(!o.site)campusPlaceNew();setTimeout(campusUI,0)}
   }catch(e){CAMP.adding=false;toast('Could not open that file: '+e.message)}
@@ -6149,7 +6149,9 @@ function syncApply(t,text){
   let theirs;try{theirs=Object.assign(blankPlan(),migratePlan(raw).plan)}catch(e){return}
   const cur=t===curTab,plan=cur?S:t.S;try{syncFloorOut(plan)}catch(e){}
   const mine=syncNorm(plan),bt=sy&&sy.par&&h&&h.get(sy.par)||SYNC_BASE[key];let base;try{base=bt?syncNorm(JSON.parse(bt)):mine}catch(e){base=mine}
-  const merged=syncMerge(base,mine,syncNorm(theirs));SYNC_BASE[key]=text;if(sy&&sy.rev){SYNC_REV[key]=sy.rev;syncSeen(key,sy.rev,text)}
+  /* another window put a different plan in this tab (it opened a file): show that plan, not a mix of the two. This window's plan is still in My plans */
+  const swapped=!!(theirs.pid&&plan.pid&&theirs.pid!==plan.pid);
+  const merged=swapped?syncNorm(theirs):syncMerge(base,mine,syncNorm(theirs));SYNC_BASE[key]=text;if(sy&&sy.rev){SYNC_REV[key]=sy.rev;syncSeen(key,sy.rev,text)}
   /* the floor on screen is this window's own */if(merged.bld&&mine.bld&&Array.isArray(merged.bld.levels)&&merged.bld.levels.some(l=>l.id===mine.bld.active))merged.bld.active=mine.bld.active;
   if(JSON.stringify(merged)===JSON.stringify(mine))return;
   /* the drawing under the plan: the other window's picture, or this one's if it is the same drawing (a save too big for storage leaves the picture out) */
