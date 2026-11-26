@@ -13,6 +13,17 @@ const num=(v,d)=>{const n=parseFloat(v);return isFinite(n)?n:(d===undefined?0:d)
 const r1=v=>Math.round(v);
 const fmt=v=>Math.round(v).toLocaleString('en-SG');
 const store={off:false,get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){if(store.off)return false;try{localStorage.setItem(k,v);return true}catch(e){return false}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+/* 5.0.0 keeps its own copy of everything in this browser (osk- keys and the storeybook-sku database) so it could be tried beside 4.6.
+   The first time it opens, it brings 4.6's tabs, settings, library and clipboard across (Jeff, 26 Nov 2026): anything 5.0.0 already has
+   under the same name is kept, 4.6's tabs are added to any already open, and 4.6's own copy is left exactly as it was. My plans follow in PLANS. */
+const OSP_MOVED={tabs:0,keys:0,missed:0,plans:0};
+(()=>{if(store.get('osk-from-osp'))return;let ks=[];try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('osp-'))ks.push(k)}}catch(e){return}
+  let idx=null;try{idx=JSON.parse(store.get('osp-tabs')||'null')}catch(e){}
+  ks.forEach(k=>{if(k==='osp-tabs'||k.startsWith('osp-tab-'))return;const k2='osk-'+k.slice(4);if(store.get(k2)==null){if(store.set(k2,store.get(k)))OSP_MOVED.keys++;else OSP_MOVED.missed++}});
+  if(idx&&Array.isArray(idx.ids)){let mine=null;try{mine=JSON.parse(store.get('osk-tabs')||'null')}catch(e){}const ids=mine&&Array.isArray(mine.ids)?mine.ids.slice():[];
+    idx.ids.forEach(id=>{const txt=store.get('osp-tab-'+id);if(!txt||ids.includes(id))return;if(store.get('osk-tab-'+id)==null&&!store.set('osk-tab-'+id,txt)){OSP_MOVED.missed++;return}ids.push(id);OSP_MOVED.tabs++});
+    if(OSP_MOVED.tabs)store.set('osk-tabs',JSON.stringify({ids,active:mine&&mine.active||idx.active}))}
+  store.set('osk-from-osp',new Date().toISOString())})();
 const isMac=/Mac|iPhone|iPad/.test(navigator.platform||'');
 
 /* ================= CSV ================= */
@@ -341,7 +352,7 @@ function renderSavePop(){const kb=Math.round(storageUse()/1024),pct=Math.min(100
   <div class="meter"><i style="width:${pct}%"></i></div><p class="muted" style="margin:4px 0 8px">Browser storage used: ${kb.toLocaleString()} KB of about 5,000 KB${st==='lite'?'. <b>The drawing did not fit</b>: the plan is autosaved, but load the drawing again next time, or save to a file':''}${st==='fail'?'. <b>Autosave is failing</b>: save to a file now':''}</p>
   <div class="row"><button class="btn sm primary" type="button" data-sv="save">Save to a file</button><button class="btn sm ghost" type="button" data-sv="wipe">Clear data in this browser…</button></div>`}
 function wipeLocal(){if(!confirm('Remove everything StoreyBook keeps in this browser?\n\n· autosaved plans for every tab\n· your settings\n· your library changes\n\nPlan files you saved are not touched. Save any open plan you want to keep first.'))return;
-  store.off=true;clearTimeout(asT);try{const ks=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('osk-'))ks.push(k)}ks.forEach(k=>localStorage.removeItem(k))}catch(e){}
+  store.off=true;clearTimeout(asT);try{const ks=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('osk-')&&!k.startsWith('osk-from-osp'))ks.push(k)}ks.forEach(k=>localStorage.removeItem(k))}catch(e){}
   PLANS.clear().catch(e=>console.warn('plan store',e)).finally(()=>{toast('Cleared. Reloading…');setTimeout(()=>location.reload(),600)})}
 
 /* ================= geometry ================= */
@@ -5984,7 +5995,15 @@ $('#pop-floor').addEventListener('click',e=>{const t=e.target.closest('[data-fl]
 /* ================= My plans: every plan ever edited in this browser, in IndexedDB =================
    Keyed by the plan's pid. Written on every autosave (debounced), listed in the My plans dialog. Independent of the tab autosave in localStorage, which only covers open tabs and is capped at ~5 MB. */
 const PLANS=(()=>{
-  let dbp=null;const open=()=>dbp||(dbp=new Promise((res,rej)=>{try{const q=indexedDB.open('storeybook-sku',1);q.onupgradeneeded=()=>{const db=q.result;if(!db.objectStoreNames.contains('plans'))db.createObjectStore('plans',{keyPath:'pid'})};q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)}catch(e){rej(e)}}));
+  let dbp=null;const open=()=>dbp||(dbp=new Promise((res,rej)=>{try{const q=indexedDB.open('storeybook-sku',1);q.onupgradeneeded=()=>{const db=q.result;if(!db.objectStoreNames.contains('plans'))db.createObjectStore('plans',{keyPath:'pid'})};q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)}catch(e){rej(e)}}).then(db=>fromOld(db).catch(e=>{console.warn('plan store: 4.6 copy',e)}).then(()=>db)));
+  /* once: every plan in 4.6's My plans (database storeybook) is copied in, unless this browser already has that plan saved later.
+     4.6's database is only read; if it does not exist it is not created (the open is cancelled), so 4.6 still starts clean */
+  const fromOld=async db=>{if(store.get('osk-from-osp-idb'))return;
+    const old=await new Promise(res=>{let q;try{q=indexedDB.open('storeybook',1)}catch(e){res(null);return}q.onupgradeneeded=()=>{try{q.transaction.abort()}catch(e){}};q.onsuccess=()=>res(q.result);q.onerror=()=>res(null);q.onblocked=()=>res(null)});
+    if(old){try{if(old.objectStoreNames.contains('plans')){const rows=await new Promise((res,rej)=>{const r=old.transaction('plans','readonly').objectStore('plans').getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)});
+      for(const r of rows){if(!r||!r.pid)continue;const have=await new Promise(res=>{const g=db.transaction('plans','readonly').objectStore('plans').get(r.pid);g.onsuccess=()=>res(g.result);g.onerror=()=>res(null)});
+        if(have&&(have.updated||0)>=(r.updated||0))continue;await new Promise((res,rej)=>{const t=db.transaction('plans','readwrite');t.objectStore('plans').put(r);t.oncomplete=res;t.onerror=()=>rej(t.error)});OSP_MOVED.plans++}}}finally{old.close()}}
+    store.set('osk-from-osp-idb',new Date().toISOString())};
   const tx=async(mode,fn)=>{const db=await open();return new Promise((res,rej)=>{const t=db.transaction('plans',mode),st=t.objectStore('plans');let out;try{out=fn(st)}catch(e){rej(e);return}t.oncomplete=()=>res(out&&typeof IDBRequest!=='undefined'&&out instanceof IDBRequest?out.result:out);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})};
   let putT=null,pending=null;
   /* a small picture of the plan: room fills, walls and item footprints, scaled into 160 x 100 */
@@ -6196,7 +6215,7 @@ document.title=`StoreyBook ${APP_VERSION}${APP_FORK?' ('+APP_FORK+')':''}${APP_T
 /* on the website, a newer build shows a reload banner; the single file skips this */
 if(/^https?:$/.test(location.protocol)){const chk=()=>fetch('version.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{if(j&&j.v&&j.v!==APP_VERSION){const b=$('#upd');if(b){b.hidden=false;b.querySelector('b').textContent=j.v}}}).catch(()=>{});
   setTimeout(chk,2500);document.addEventListener('visibilitychange',()=>{if(!document.hidden)chk()});$('#upd-go')&&$('#upd-go').addEventListener('click',()=>location.reload());$('#upd-x')&&$('#upd-x').addEventListener('click',()=>{$('#upd').hidden=true})}
-{const all=libNotes.concat(bootNotes);if(all.length)setTimeout(()=>notice('Updated to version '+APP_VERSION,all,''),400)}
+{const all=libNotes.concat(bootNotes);if(OSP_MOVED.tabs||OSP_MOVED.keys)all.unshift(`Your ${OSP_MOVED.tabs===1?'open plan':OSP_MOVED.tabs+' open plans'} and settings from StoreyBook 4.6 were brought across. 4.6 keeps its own copy.`.replace('Your 0 open plans and','Your'));if(OSP_MOVED.missed)all.push(`${OSP_MOVED.missed} item${OSP_MOVED.missed===1?'':'s'} from 4.6 did not fit in this browser's storage and stayed with 4.6. My plans still lists every plan.`);if(all.length)setTimeout(()=>notice('Updated to version '+APP_VERSION,all,''),400)}
 /* on-screen keyboard: when it opens (the visual viewport shrinks) the field being typed in is scrolled into the part still visible */
 if(window.visualViewport){const vv=window.visualViewport;const keep=()=>{const a=document.activeElement;if(!a||!a.matches||!a.matches('input,textarea,select'))return;const r=a.getBoundingClientRect(),bot=vv.offsetTop+vv.height;if(r.bottom>bot-8||r.top<vv.offsetTop)try{a.scrollIntoView({block:'center',inline:'nearest'})}catch(e){}};vv.addEventListener('resize',()=>{setTimeout(keep,50);setTimeout(keep,200)});window.addEventListener('resize',()=>setTimeout(keep,120));document.addEventListener('focusin',()=>setTimeout(keep,300))}
 /* accessibility: every control gets a name (from its label row, title or placeholder) as panels are drawn,
