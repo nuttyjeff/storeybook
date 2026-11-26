@@ -44,6 +44,12 @@ export async function run(b){
     await B.evaluate(()=>{window.__osp.setSel([]);document.dispatchEvent(new KeyboardEvent('keydown',{key:'v',ctrlKey:true,bubbles:true,cancelable:true}))});await wait(1800);
     const n1=(await items(B)).length,n1A=(await items(A)).length;
     out.push(row('sync-clip','Something copied in one window pastes in another, and the paste reaches the first',n1===n0+1&&n1A===n1,{before:n0,b:n1,a:n1A}));
+    /* a plan file opened in A replaces the plan in that tab; B shows the same plan, and A's opened file comes back on reload before any edit */
+    const fileTxt=await A.evaluate(()=>{const p=window.__osp.blankPlan();p.name='Opened file';p.objs=[{id:'fx1',t:'text',x:1000,y:1000,text:'From a file'}];return JSON.stringify(p)});
+    await A.evaluate(t=>window.__osp.openPlanText(t,null,'opened.json'),fileTxt);await wait(1500);
+    /* it opens in a tab of its own; B gets that tab and stays on the one it was showing */const fB=await B.evaluate(()=>{const o=window.__osp,ps=o.tabsRaw().map(t=>t===o.curTab()?o.S():t.S),p=ps.find(x=>x.name==='Opened file')||{objs:[]};return {name:p.name,t:p.objs.filter(x=>x.t==='text').map(x=>x.text),tabs:ps.length}});
+    await A.reload({waitUntil:'load'});await A.waitForFunction(()=>window.__osp&&window.__osp.S,{timeout:20000});const fA=await A.evaluate(()=>({name:window.__osp.S().name,t:window.__osp.S().objs.filter(o=>o.t==='text').map(o=>o.text)}));
+    out.push(row('sync-file','A plan opened from a file opens in the other window too, and comes back on reload before any edit',fB.name==='Opened file'&&JSON.stringify(fB.t)==='["From a file"]'&&fA.name==='Opened file'&&JSON.stringify(fA.t)==='["From a file"]',{b:fB,a:fA}));
     const errs=[...A.errs,...B.errs].filter(e=>!/net::|Failed to load resource/.test(e));
     out.push(row('sync-errors','No errors in either window',!errs.length,errs.slice(0,3)));
   }catch(e){out.push(row('sync-run','Window sync checks ran',false,String(e&&e.stack||e).slice(0,400)))}
