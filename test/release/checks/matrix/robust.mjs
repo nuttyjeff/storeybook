@@ -105,7 +105,7 @@ const INV=()=>{const o=window.__osp,S=o.S(),out={};
   const tl=[];const on=[...document.querySelectorAll('.dock [data-tool].on')];if(on.length>1)tl.push('dock lit: '+on.map(b=>b.dataset.tool).join('+'));
   const is3=!document.querySelector('#v3').hidden;const svg=document.querySelector('#plan');
   if(!is3&&!o.WALK.on&&o.dragM()==null){const cur=svg.style.cursor;
-    if(on.length===1){const t=on[0].dataset.tool,want=t==='select'?'default':t==='pan'?'grab':'crosshair';if(cur!==want)tl.push(`dock ${t} but cursor ${cur}`)}
+    if(on.length===1){const t=on[0].dataset.tool,want=o.walkPick&&o.walkPick()?'crosshair'/* picking where to stand for Walk: Select stays lit and the plan shows the crosshair */:t==='select'?'default':t==='pan'?'grab':'crosshair';if(cur!==want)tl.push(`dock ${t} but cursor ${cur}`)}
     /* no dock button lit is only right for the tools that have none (placing from the library, adding a point), which draw with the crosshair */
     else if(on.length===0&&cur!=='crosshair')tl.push(`no dock tool lit but cursor ${cur||'unset'}`)}
   if(innerWidth<=820){const dl=document.querySelector('#mbar [data-m=draw] span');const lab=dl?dl.textContent.trim():'';if(lab!=='Draw'&&!(on.length===1&&on[0].textContent.trim()===lab))tl.push(`mbar Draw says ${lab}, dock ${on.map(b=>b.dataset.tool)}`);

@@ -983,6 +983,12 @@ export async function from46(b){const R=[];const ctx=await b.newContext({viewpor
     await restart();const t3=await tabsNow();
     add(R,'s-from-46-steady','Upgrade from 4.6: with nothing new in 4.6, another start changes nothing',JSON.stringify(t3)===JSON.stringify(t2),{tabs:t3});
     add(R,'s-from-46-clean','Upgrade from 4.6: no console or page errors',!errs.length,errs.slice(0,3));
+    /* Walk from 3D asks where to stand with a crosshair; leaving that pick with Esc or the Walk button gives the Select cursor back (found by the Safari chaos run, seed 677468090) */
+    await pg.evaluate(()=>window.__osp.setTool('select'));await pg.click('#v3d');await pg.waitForTimeout(600);await pg.click('#b-walk');await pg.waitForTimeout(300);
+    const pick=await pg.evaluate(()=>({pick:window.__osp.walkPick(),cur:document.querySelector('#plan').style.cursor}));await pg.keyboard.press('Escape');await pg.waitForTimeout(150);
+    const esc=await pg.evaluate(()=>({pick:window.__osp.walkPick(),cur:document.querySelector('#plan').style.cursor}));await pg.click('#b-walk');await pg.waitForTimeout(150);await pg.click('#b-walk');await pg.waitForTimeout(150);
+    const btn=await pg.evaluate(()=>({pick:window.__osp.walkPick(),cur:document.querySelector('#plan').style.cursor}));
+    add(R,'s-walkpick-cursor','Walk from 3D shows the crosshair to pick where to stand; Esc, or the Walk button pressed again, ends the pick and the plan shows the Select cursor again',pick.pick&&pick.cur==='crosshair'&&!esc.pick&&esc.cur==='default'&&!btn.pick&&btn.cur==='default',{pick,esc,btn});
     /* a browser that already used the 5.0.0 test builds keeps them and gains 4.6's tabs; its own settings win */
     const ctx2=await b.newContext({viewport:{width:1400,height:900}});try{const p2=await ctx2.newPage();p2.on('dialog',d=>d.accept().catch(()=>{}));await p2.goto(seedUrl);
       await p2.evaluate(([a,c])=>{localStorage.setItem('osk-tabs',JSON.stringify({ids:['new1'],active:'new1'}));localStorage.setItem('osk-tab-new1',c);localStorage.setItem('osk-prefs',JSON.stringify({grid:1000}));
