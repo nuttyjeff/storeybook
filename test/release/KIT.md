@@ -51,7 +51,7 @@ The report shows:
 - **You added a function:** a new Search command, right-click entry or setting is picked up by the functions layer by itself.
   A new shortcut needs a line in `SBKEY`/`SUKEY` in `checks/functions.mjs` (the layer fails until it has one, so it cannot be missed).
   A new checklist row needs a pattern in `coverage.json` if its checks do not carry the row code in their ids.
-- **Before a release:** `npm run kit:full` must say RELEASE OK (or run the release gate on GitHub, split across machines), then work through
+- **Before a release:** run the release gate on GitHub (Actions › Release gate › Run workflow): 15 parts at once, about 20 minutes. Its parts are core (build, load, old files, smoke, detection, screenshots, deploy), functions and chaos and windows, rules and bad input and simulated users and speed, the device matrix (shell, tablet views, objects and editing, phone and 3D and data, robustness, five layout parts) and the device matrix again with SketchUp keys. `npm run kit:full` runs the same on one machine (about an hour), then work through
   `DEVICE-CHECKLIST.md` on a real iPad with Pencil, iPhone and laptop (about 10 minutes): the things a server browser cannot see.
 - **Narrow a run:** `npm run kit -- --only=build,functions` runs just those layers with the same report.
 
