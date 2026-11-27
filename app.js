@@ -643,7 +643,8 @@ function draw(){
   // rooms
   let rs='',an='';
   const wallPx=P.wall>0?Math.max(1.5,P.wall*k):1.5;
-  S.objs.filter(o=>o.t==='room').forEach(o=>{
+  /* larger rooms first, so a room drawn round others never covers them: the smaller ones stay visible and are what a click inside them picks (found on an iPad, 26 Nov 2026) */
+  S.objs.filter(o=>o.t==='room').map((o,i)=>[o,i,o.pts&&o.pts.length>2?Math.abs(polyArea(o.pts)):0]).sort((a,b)=>b[2]-a[2]||a[1]-b[1]).map(x=>x[0]).forEach(o=>{
     const d='M'+o.pts.map(p=>p[0]+' '+p[1]).join('L')+'Z';
     const fc=o.floorCol||(S.style&&S.style.floor);
     const mg=LY('mig')?migRoom(o):null;
@@ -2004,6 +2005,13 @@ const PARAM_INFO={
   'gap across':'Spacing between columns, in millimetres.',
   'gap down':'Spacing between rows, in millimetres.'
 };
+/* touch screens: the − and + buttons sit in a row under the number, not over it. The finger-size rule made them 40 px each, wider than the room
+   left inside the field, so they covered the number and a tap meant for typing pressed − (found on an iPad, 26 Nov 2026). Beside the number
+   there was no room to show five digits, so they go underneath. (#stp-none never exists:
+   it only lifts these rules above the finger-size rule) */
+(()=>{const st=document.createElement('style');st.textContent=`html.touch :is(#stp-none,body) label.has-stp>input{width:100%!important;padding-right:10px!important;min-height:40px;box-sizing:border-box}
+html.touch :is(#stp-none,body) label.has-stp>.stp{position:static;display:flex;gap:8px;margin-top:6px}
+html.touch :is(#stp-none,body) label.has-stp>.stp>button{flex:1;width:auto!important;min-width:40px!important;height:40px!important;min-height:40px!important}`;document.head.appendChild(st)})();
 function addSteppers(root){if(!TOUCH||!root)return;root.querySelectorAll('label>input[type=number]').forEach(inp=>{const lb=inp.parentElement;if(lb.querySelector('.stp'))return;const st=document.createElement('span');st.className='stp';st.innerHTML='<button type="button" data-stp="-1" aria-label="Less">−</button><button type="button" data-stp="1" aria-label="More">+</button>';lb.appendChild(st);lb.classList.add('has-stp');stpSync(inp)})}
 /* a stepper button at the field's limit is greyed out rather than silently doing nothing */
 function stpSync(inp){const st=inp&&inp.parentElement&&inp.parentElement.querySelector('.stp');if(!st)return;const cur=inp.value===''?(+inp.placeholder||0):(+inp.value||0);
@@ -3058,7 +3066,7 @@ async function exportPNG(){
 
 /* ================= menus & settings ================= */
 function closePops(except){if(except!=='#pop-layers'&&$('#t-layers'))$('#t-layers').classList.remove('on');['#pop-set','#pop-more','#pop-shape','#pop-layers','#pop-floor','#pop-stl','#pop-save','#ctxmenu'].forEach(s=>{if(s!==except)$(s).hidden=true})}
-function togglePop(s,anchor){const p=$(s);const open=p.hidden;closePops(s);p.hidden=!open;if(open&&anchor){const r=anchor.getBoundingClientRect(),m=$('#main').getBoundingClientRect();if(s==='#pop-shape'){p.style.left=Math.max(8,r.left-m.left-60)+'px';p.style.bottom=(m.bottom-r.top+8)+'px';p.style.top='auto'}}}
+function togglePop(s,anchor){const p=$(s);const open=p.hidden;closePops(s);/* the AI panel sits above every menu, so a menu opened while it shows would open underneath it (found on an iPad, 26 Nov 2026): the panel closes; its conversation is kept */if(open){const ai=$('#ai-panel');if(ai&&!ai.hidden)aiClose()}p.hidden=!open;if(open&&anchor){const r=anchor.getBoundingClientRect(),m=$('#main').getBoundingClientRect();if(s==='#pop-shape'){p.style.left=Math.max(8,r.left-m.left-60)+'px';p.style.bottom=(m.bottom-r.top+8)+'px';p.style.top='auto'}}}
 $('#b-set').addEventListener('click',e=>{e.stopPropagation();togglePop('#pop-set');renderSetColors()});
 $('#b-more').addEventListener('click',e=>{e.stopPropagation();togglePop('#pop-more')});
 $('#t-shape').addEventListener('click',e=>{e.stopPropagation();togglePop('#pop-shape',e.currentTarget)});
@@ -3079,7 +3087,7 @@ $('#s-mig').checked=migCfg().on;$('#s-mig').addEventListener('change',e=>{P.mig=
 bindSet('#s-grid','grid',Number);bindSet('#s-snap','snap');bindSet('#s-snapsz','snapSize',Number);bindSet('#s-osnap','osnap');bindSet('#s-ortho','ortho');bindSet('#s-dims','dims');bindSet('#s-clash','clash');bindSet('#s-wall','wall',Number);bindSet('#s-theme','theme');bindSet('#s-fill','fill');bindSet('#s-lbl','lbl');bindSet('#s-inv','inv');
 function applyTheme(){if(P.theme==='system')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=P.theme;updateUnderImg()}
 $('#z-in').addEventListener('click',()=>zoomAt(1.25,W/2,H/2));$('#z-out').addEventListener('click',()=>zoomAt(0.8,W/2,H/2));$('#z-fit').addEventListener('click',fit);
-$('#m-new').addEventListener('click',()=>{closePops();newTab(blankPlan());toast('New blank plan opened in its own tab')});
+$('#m-new').addEventListener('click',()=>{closePops();newTab(blankPlan(),true);toast('New blank plan opened in its own tab')});
 /*@dev-only*/$('#m-sample')&&$('#m-sample').addEventListener('click',()=>{closePops();newTab(blankPlan());loadSample();curTab.S=S;renderTabs();toast('Sample office floor opened in a new tab')});/*@end-dev-only*/
 $('#m-open').addEventListener('click',()=>{closePops();openPlan()});
 $('#m-under').addEventListener('click',()=>{closePops();$('#f-under').click()});
@@ -3933,8 +3941,10 @@ const TUT_CH=[
   {h:'Fill a row of desks',say:()=>`Search <kbd>workstation</kbd> and click one. Then press in the big room and drag sideways: a whole row fills in as you drag. A single click places just one.`,ghost:()=>tgLine([1500,2000],[6500,2000],'drag along here'),base:()=>tCat('Workstation'),done:b=>tCat('Workstation')>=b+2,auto:()=>{const l=tLib(x=>x.cat==='Workstation');if(l)addObjs([0,1,2,3].map(i=>itemFromLib(l,1500+i*(l.w+100),2000,0)),true);setTool('select')}},
   {h:'Look at an item',at:'.dock [data-tool="select"]',say:()=>`Click <b>Select</b>${tK('Space')}, then click one desk. The panel on the right shows its size, height, label and colour, and every number there can be typed over.`,enter:()=>{sel=new Set();openInsp();showTab('sel');render();renderInspector()},done:()=>sel.size===1&&!!P.insp&&selList()[0].t==='item',auto:()=>{const o=tDesk();if(o){setTool('select');setSel([o.id]);openInsp();showTab('sel')}}},
   {h:'Paint a floor',at:'.dock [data-tool="paint"]',say:()=>`Click <b>Paint</b>${tK('B')}, pick a colour from the strip that appears, and click the floor of the meeting room. Walls, doors and furniture take paint the same way, in 2D and 3D.`,base:tColSig,done:b=>tColSig()!==b,auto:()=>{const r=S.objs.filter(o=>o.t==='room').pop();if(r){checkpoint();r.floorCol='#d9c7a7';markDirty();render()}setTool('select')}}]},
- {t:'Move, copy and change',d:'Move a desk an exact distance, make copies, turn, scale, offset an outline, pull out a guide, erase and undo.',steps:[
+ {t:'Move, copy and change',d:'Lock the rooms so they cannot move by accident, move a desk an exact distance, make copies, turn, scale, offset an outline, pull out a guide, erase and undo.',steps:[
+  {h:'Lock the rooms',at:'#b-lock',say:()=>`Before you arrange furniture, click the <b>padlock</b> at the top. It locks every room and wall, so a drag meant for a desk can never move a room by accident: clicks go straight through to the furniture.`,base:()=>0,done:()=>!!S.locked,auto:()=>{if(!S.locked)$('#b-lock').click()}},
   {h:'Move a desk',at:'.dock [data-tool="su-move"]',say:()=>`Click <b>Move</b>${tK('M')}. Click a desk to pick it up, move the pointer, and click again to put it down. Straight after, type <kbd>1000</kbd> and <kbd>Enter</kbd> to make the move exactly 1,000 mm.`,base:()=>SU.last,done:b=>!!SU.last&&SU.last.kind==='move'&&!SU.last.copy&&SU.last!==b,auto:()=>{const o=tDesk();if(!o)return;setTool('su-move');suMoveStart([o],[o.x,o.y]);suMoveApply([0,1000]);suMoveCommit()}},
+  {h:'Unlock the rooms',at:'#b-lock',say:()=>`Click the padlock again to unlock the rooms, so you can change them in the next steps. Lock them whenever you are only moving furniture.`,base:()=>0,done:()=>!S.locked,auto:()=>{if(S.locked)$('#b-lock').click()}},
   {h:'Make copies',at:'.dock [data-tool="su-move"]',say:()=>`Still in <b>Move</b>: click a desk, tap <kbd>Ctrl</kbd> once (the hint changes to Copy), and click to put the copy down. Then type <kbd>x3</kbd> and <kbd>Enter</kbd> for three copies the same distance apart.`,base:()=>SU.last,done:b=>!!SU.last&&SU.last.kind==='move'&&!!SU.last.copy&&(SU.last!==b||!TUT.f.wasCopy),enter:()=>{TUT.f.wasCopy=!!(SU.last&&SU.last.copy)},auto:()=>{const o=tDesk();if(!o)return;setTool('su-move');suMoveStart([o],[o.x,o.y]);suCopyToggle();suMoveApply([0,1200]);suMoveCommit()}},
   {h:'Turn it',at:'.dock [data-tool="su-rotate"]',say:()=>`Click <b>Rotate</b>${tK('Q')}. Click a desk (that point is the centre), click again to set a starting direction, then turn and click. It snaps every 15°; or type an angle such as <kbd>90</kbd> and <kbd>Enter</kbd>.`,base:()=>SU.last,done:tLast('rot'),auto:()=>{const o=tDesk();if(!o)return;setTool('su-rotate');suRotStart([o],[o.x,o.y]);suRotRef([o.x+1000,o.y]);suRotApply(90);suRotCommit()}},
   {h:'Scale it',tool:'su-scale',say:()=>`Choose <b>Scale</b>${tK('S')} with the button below. Click a desk and pull away from its centre, then click; or type a factor such as <kbd>1.5</kbd> and <kbd>Enter</kbd>. Plan sizes change, heights stay.`,base:()=>SU.last,done:tLast('sc'),auto:()=>{const o=tDesk();if(!o)return;setTool('su-scale');suScaleStart([o],[o.x+o.w/2,o.y]);suScaleApply(1.5);suScaleCommit()}},
@@ -4300,7 +4310,9 @@ function build3D(tg,opts){/* while the browser has taken the graphics away nothi
   const customFloor=!!(S.style&&S.style.floor);
   floorPlate().forEach(poly=>{const sh=new THREE.Shape(poly.map(p=>new THREE.Vector2(p[0]*s,-p[1]*s)));coreHoles(sh,downs,poly);const g=new THREE.ShapeGeometry(sh);g.rotateX(-Math.PI/2);const m=new THREE.Mesh(g,mat(planFloorCol(),showU&&!customFloor&&!sub?{transparent:true,opacity:0.3}:null));m.position.y=0.0005;m.receiveShadow=true;if(!sub)m.userData.paint='basefloor';group.add(m)});
   /* room floors on top; a chosen colour stays solid even with the drawing showing */
-  rooms.forEach(o=>{const zc=zoneVis(o)?ZONE_BY[o.zone][o.zone==='white'?2:3]:null;const custom=!!(zc||o.floorCol||customFloor);const sh=new THREE.Shape(o.pts.map(p=>new THREE.Vector2(p[0]*s,-p[1]*s)));coreHoles(sh,downs,o.pts);const g=new THREE.ShapeGeometry(sh);g.rotateX(-Math.PI/2);const ry=o.raise>0?o.raise:0;const m=new THREE.Mesh(g,mat(zc||o.floorCol||planFloorCol(),showU&&!custom&&!sub?{transparent:true,opacity:0.3}:null));m.position.y=ry*s+0.001;m.receiveShadow=true;if(!sub){m.userData.id=o.id;m.userData.paint='floor'}group.add(m);if(ry>0){const sc=mat(o.floorCol||(dark?'#5a636c':'#aeb4bb'));for(let i=0;i<o.pts.length;i++){const a=o.pts[i],bq=o.pts[(i+1)%o.pts.length],L=Math.hypot(bq[0]-a[0],bq[1]-a[1]);if(L<1)continue;const sk=new THREE.Mesh(new THREE.BoxGeometry(L*s,ry*s,40*s),sc);sk.position.set((a[0]+bq[0])/2*s,ry/2*s,(a[1]+bq[1])/2*s);sk.rotation.y=-Math.atan2(bq[1]-a[1],bq[0]-a[0]);sk.castShadow=true;sk.receiveShadow=true;group.add(sk)}}});
+  /* a room inside a larger one: its floor sits a hair higher so the two never flicker, and the smaller one shows (26 Nov 2026) */
+  const lift=new Map(rooms.map(o=>[o,o.pts&&o.pts.length>2?Math.abs(polyArea(o.pts)):0]).sort((a,b)=>b[1]-a[1]).map(([o],i)=>[o.id,i]));
+  rooms.forEach(o=>{const zc=zoneVis(o)?ZONE_BY[o.zone][o.zone==='white'?2:3]:null;const custom=!!(zc||o.floorCol||customFloor);const sh=new THREE.Shape(o.pts.map(p=>new THREE.Vector2(p[0]*s,-p[1]*s)));coreHoles(sh,downs,o.pts);const g=new THREE.ShapeGeometry(sh);g.rotateX(-Math.PI/2);const ry=o.raise>0?o.raise:0;const m=new THREE.Mesh(g,mat(zc||o.floorCol||planFloorCol(),showU&&!custom&&!sub?{transparent:true,opacity:0.3}:null));m.position.y=ry*s+0.001+Math.min(40,lift.get(o.id)||0)*0.0003;m.receiveShadow=true;if(!sub){m.userData.id=o.id;m.userData.paint='floor'}group.add(m);if(ry>0){const sc=mat(o.floorCol||(dark?'#5a636c':'#aeb4bb'));for(let i=0;i<o.pts.length;i++){const a=o.pts[i],bq=o.pts[(i+1)%o.pts.length],L=Math.hypot(bq[0]-a[0],bq[1]-a[1]);if(L<1)continue;const sk=new THREE.Mesh(new THREE.BoxGeometry(L*s,ry*s,40*s),sc);sk.position.set((a[0]+bq[0])/2*s,ry/2*s,(a[1]+bq[1])/2*s);sk.rotation.y=-Math.atan2(bq[1]-a[1],bq[0]-a[0]);sk.castShadow=true;sk.receiveShadow=true;group.add(sk)}}});
   // walls, deduplicated, with door openings
   const doors=S.objs.filter(o=>isOpening(o)&&visible(o));
   const ceilH=opts.ceil!=null?opts.ceil:(S.bld?lvVal(S.bld,bldLevel(S),'ceiling'):2800);
@@ -6067,7 +6079,7 @@ $('#m-plans').addEventListener('click',()=>openPlans());
 $('#f-plans')&&$('#f-plans').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const r=await PLANS.importAll(await f.text());toast(`Imported ${r.added} ${r.added===1?'plan':'plans'}${r.skipped?`, ${r.skipped} already here and newer`:''}`);openPlans()}catch(err){toast('Could not import: '+(err.message||err))}});
 $('#plans-modal').addEventListener('click',async e=>{
   if(e.target.id==='plans-modal'||e.target.closest('[data-pclose]')){$('#plans-modal').hidden=true;return}
-  if(e.target.closest('[data-pnew]')){$('#plans-modal').hidden=true;newTab(blankPlan());toast('New blank plan');return}
+  if(e.target.closest('[data-pnew]')){$('#plans-modal').hidden=true;newTab(blankPlan(),true);toast('New blank plan');return}
   if(e.target.closest('[data-popen]')){$('#plans-modal').hidden=true;$('#m-open').click();return}
   if(e.target.closest('[data-pexport]')){try{PLANS.flush();const t=await PLANS.exportAll();const n=JSON.parse(t).plans.length;if(!n){toast('Nothing to export yet');return}const r=await saveText('storeybook-plans.json',t,'application/json','.json','StoreyBook plans');if(r)toast(`${n} ${n===1?'plan':'plans'} exported`)}catch(err){toast('Export failed: '+(err.message||err))}return}
   if(e.target.closest('[data-pimport]')){$('#f-plans').click();return}
@@ -6103,9 +6115,12 @@ function applyTab(t){
   if(AI.wait&&AI.wait.tab===t){const w=AI.wait;AI.wait=null;w.res()}
 }
 const curUntouched=()=>!S.objs.length&&!(S.underlay&&S.underlay.src)&&!past.length&&!fileHandle;
-function newTab(plan){
+/* always: a new tab is what the person asked for (the + button, New plan), so it is added even when the open plan is still empty.
+   Without it (opening a file, the sample), an empty untouched tab is reused instead of leaving a stray blank one behind */
+function newTab(plan,always){
   leaveRoof();
-  if(curTab&&curUntouched()){curTab.V=null;curTab.S=plan;applyTab(Object.assign(curTab,{S:plan,sel:new Set(),past:[],future:[],dirty:false,fileHandle:null,pdfDoc:null,V:null}));autosave();return curTab}
+  if(always&&plan.name==='Untitled plan'){const used=new Set(tabs.map(t=>(t===curTab?S:t.S).name));let n=2;if(used.has(plan.name)){while(used.has('Untitled plan '+n))n++;plan.name='Untitled plan '+n}}
+  if(!always&&curTab&&curUntouched()){curTab.V=null;curTab.S=plan;applyTab(Object.assign(curTab,{S:plan,sel:new Set(),past:[],future:[],dirty:false,fileHandle:null,pdfDoc:null,V:null}));autosave();return curTab}
   leaveRoof();captureTab();const t={id:uid(),S:plan,sel:new Set(),past:[],future:[],dirty:false,fileHandle:null,pdfDoc:null,pdfName:'',V:null};
   tabs.splice(tabs.indexOf(curTab)+1,0,t);saveTabData(t,plan);applyTab(t);return t;
 }
@@ -6125,7 +6140,7 @@ function renderTabs(){const el=$('#ptabs');if(!el)return;if(curTab){if(curTab._n
     return `<div class="ptab${on?' on':''}" data-tab="${t.id}" tabindex="0" role="tab" aria-selected="${on}" title="${esc(nm)}${dt?' · not saved to a file':''}${tabs.length>1?' · Alt+← / Alt+→ moves this tab':''}"><span class="nm">${esc(nm||'Untitled plan')}</span>${dt?'<i class="dot" aria-label="Not saved to a file"></i>':''}<button type="button" class="x" data-tab-close="${t.id}" aria-label="Close ${esc(nm)}">×</button></div>`}).join('')+
     `<button type="button" class="ptab-add" id="ptab-add" title="New blank plan in a new tab" aria-label="New tab">+</button>`}
 $('#ptabs').addEventListener('click',e=>{const c=e.target.closest('[data-tab-close]');if(c){e.stopPropagation();closeTab(tabs.find(t=>t.id===c.dataset.tabClose));return}
-  if(e.target.closest('#ptab-add')){newTab(blankPlan());return}const t=e.target.closest('[data-tab]');if(t)switchTab(tabs.find(x=>x.id===t.dataset.tab))});
+  if(e.target.closest('#ptab-add')){newTab(blankPlan(),true);return}const t=e.target.closest('[data-tab]');if(t)switchTab(tabs.find(x=>x.id===t.dataset.tab))});
 /* drag a plan tab sideways to reorder it, the way browser tabs move: the tab follows the pointer and swaps places as it passes a neighbour's middle */
 {let td=null,tabNoClick=false;const bar=$('#ptabs');
   bar.addEventListener('pointerdown',e=>{if(e.button)return;const t=e.target.closest('.ptab');if(!t||e.target.closest('.x')||tabs.length<2)return;td={el:t,pid:e.pointerId,x0:e.clientX,on:false}});
