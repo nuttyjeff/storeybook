@@ -784,7 +784,7 @@ async function desktop(b){
     await ev(pg,()=>{document.querySelector('#tut-menu').hidden=true});
     const chs=await ev(pg,()=>window.__osp.tutChapters());const bad=[];let steps=0,ends=0,rings=0;
     for(let c=0;c<chs.length;c++){await ev(pg,c=>window.__osp.tutStart(c),c);await pg.waitForTimeout(450);
-      for(let i=0;i<chs[c];i++){const b=await ev(pg,()=>{window.__osp.tutTick();return {ok:window.__osp.tutStepOk(),ring:!document.querySelector('#tut-ring').hidden,i:window.__osp.TUT().i}});if(b.i!==i){bad.push((c+1)+'.'+(i+1)+' not shown');break}if(b.ok===true&&i<chs[c]-1)bad.push((c+1)+'.'+(i+1)+' done before it was done');else if(typeof b.ok==='string')bad.push((c+1)+'.'+(i+1)+' '+b.ok);if(b.ring)rings++;
+      for(let i=0;i<chs[c];i++){const b=await ev(pg,()=>{window.__osp.tutTick();const hl=document.querySelector('.tut-hl');return {ok:window.__osp.tutStepOk(),ring:!!hl&&hl===window.__osp.tutTarget(),i:window.__osp.TUT().i}});if(b.i!==i){bad.push((c+1)+'.'+(i+1)+' not shown');break}if(b.ok===true&&i<chs[c]-1)bad.push((c+1)+'.'+(i+1)+' done before it was done');else if(typeof b.ok==='string')bad.push((c+1)+'.'+(i+1)+' '+b.ok);if(b.ring)rings++;
         await ev(pg,()=>window.__osp.tutAuto());let ok=false;for(let k=0;k<50&&!ok;k++){await pg.waitForTimeout(120);ok=await ev(pg,i=>window.__osp.TUT().i>i,i)}if(!ok){bad.push((c+1)+'.'+(i+1)+' did not move on');break}steps++}
       if(/Chapter \d+ done/.test(await ev(pg,()=>document.querySelector('#tut h4').textContent)))ends++}
     const fin=await ev(pg,async()=>{const o=window.__osp,w=ms=>new Promise(r=>setTimeout(r,ms));const done=Object.keys((o.P().tut||{}).done||{}).length,name=o.S().name;o.tutExit();if(o.WALK.on)document.querySelector('#b-walk').click();o.set3D(false);await w(200);o.suKeys(false);return {done,name,card:document.querySelector('#tut').hidden,lib:!!o.P().lib,insp:!!o.P().insp}});
@@ -1053,4 +1053,56 @@ export async function ppFloors(b){const R=[];const ctx=await b.newContext({viewp
     const after=await pg.evaluate(()=>{const S=window.__osp.S();return S.bld.levels.map(l=>l.ceiling!=null&&l.ceiling!==''?+l.ceiling:+S.bld.ceiling)});
     add(R,'s-pp-floors','Push/Pull in the Building view: pressing on the second floor and dragging up raises that floor\'s height and leaves the first floor as it was',before.length===2&&after[1]>before[1]&&after[0]===before[0]&&!errs.length,{before,after,errs:errs.slice(0,2)});
   }catch(e){add(R,'s-pp-floors','Push/Pull floors check ran',false,String(e&&e.stack||e).slice(0,300))}finally{await ctx.close()}return R}
-export async function run(b){ids.length=0;const R=[];R.push(...await desktop(b));R.push(...await phone(b));R.push(...await from46(b));R.push(...await ipadSteppers(b));R.push(...await roomOrder(b));R.push(...await ppFloors(b));return R}
+/* the tutorial and the Walls tool on an iPad, by touch and with a pen (found on an iPad Pro with an Apple Pencil, 27 Nov 2026): the chapter list scrolls
+   and fits; every step's ring is on its control and in view (the dock scrolls sideways when the iPad is upright); walls drawn by tapping two ends and
+   Done; a hand resting on the glass while the pen draws neither moves the plan nor eats the pen's tap; the Name step leaves Walls and has a Rename
+   button; Do it for me on the room-turning step works after the room was turned by hand; the top bar's Tutorial button offers to carry on */
+export async function ipadTutorial(b){const R=[];const out={};
+  for(const [vw,vh] of [[1366,1024],[1024,1366]]){const ctx=await b.newContext({viewport:{width:vw,height:vh},deviceScaleFactor:1,isMobile:ENGINE==='chromium',hasTouch:true});const o={};
+  try{const pg=await ctx.newPage();pg.ctx=ctx;const errs=[];pg.on('pageerror',e=>errs.push('PE:'+e.message));pg.on('dialog',d=>d.accept().catch(()=>{}));await pg.goto(devFile(),{waitUntil:'load'});await pg.waitForFunction(()=>window.__osp&&window.__osp.S,{timeout:20000});await pg.waitForTimeout(300);
+    const t=await touch(pg);const ctr=s=>ev(pg,s=>{const e=document.querySelector(s);if(!e)return null;const r=e.getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2]},s);const tapS=async s=>{const p=await ctr(s);if(!p)throw new Error('no '+s);await t.tap(p[0],p[1]);await pg.waitForTimeout(150)};
+    const step=async n=>{for(let k=0;k<n;k++){const i0=await ev(pg,()=>window.__osp.TUT().i);await ev(pg,()=>window.__osp.tutAuto());for(let j=0;j<40;j++){await pg.waitForTimeout(100);if(await ev(pg,i=>window.__osp.TUT().i>i,i0))break}}};
+    /* the chapter list from the top bar: fits the screen and its last chapter can be scrolled to by finger */
+    await tapS('#b-tut');await pg.waitForTimeout(300);
+    o.menu=await ev(pg,()=>{const m=document.querySelector('#tut-menu'),c=m.querySelector('.tut-mc').getBoundingClientRect(),l=m.querySelector('.tut-ml');return {open:!m.hidden,fits:c.top>=0&&c.bottom<=innerHeight,n:m.querySelectorAll('.tut-ch').length,over:l.scrollHeight>l.clientHeight}});
+    if(o.menu.over){const p=await ctr('#tut-menu .tut-ml');await t.drag([p[0],p[1]+150],[p[0],p[1]-250]);await pg.waitForTimeout(400)}
+    o.menu.last=await ev(pg,()=>{const l=document.querySelector('#tut-menu .tut-ml'),r=[...l.querySelectorAll('.tut-ch')].pop().getBoundingClientRect(),q=l.getBoundingClientRect();return r.bottom<=q.bottom+1&&r.top>=q.top-1});
+    await ev(pg,()=>{document.querySelector('#tut-menu .tut-ml').scrollTop=0});await tapS('#tut-menu [data-tc="0"]');await pg.waitForTimeout(400);o.menu.started=await ev(pg,()=>window.__osp.TUT().on&&window.__osp.TUT().ch===0);
+    /* every step's ring sits on a control that is in view and not clipped */
+    const chs=await ev(pg,()=>window.__osp.tutChapters());const off=[];let rings=0;
+    for(let c=0;c<chs.length;c++){await ev(pg,c=>window.__osp.tutStart(c),c);await pg.waitForTimeout(300);
+      for(let i=0;i<chs[c];i++){await pg.waitForTimeout(150);const r=await ev(pg,()=>{const o=window.__osp;o.tutTick();const hl=document.querySelector('.tut-hl');if(!hl)return null;const q=hl.getBoundingClientRect();if(q.left<0||q.top<0||q.right>innerWidth||q.bottom>innerHeight)return 'off screen';
+          for(let a=hl.parentElement;a&&a!==document.body;a=a.parentElement){const cs=getComputedStyle(a);if(/(auto|scroll|hidden)/.test(cs.overflowX+cs.overflowY)){const b=a.getBoundingClientRect();if(q.left<b.left-1||q.right>b.right+1||q.top<b.top-1||q.bottom>b.bottom+1)return 'clipped by '+(a.id||a.className)}}
+          const top=document.elementFromPoint(q.left+q.width/2,q.top+q.height/2);if(top&&!hl.contains(top)&&!top.contains(hl))return 'under '+(top.id||top.className);return 'ok'});
+        if(r==='ok')rings++;else if(r)off.push((c+1)+'.'+(i+1)+' '+r);await step(1)}}
+    o.rings=rings;o.off=off.slice(0,5);await ev(pg,()=>{const o=window.__osp;o.tutExit();o.TUT().pid=null;delete o.P().tut.last});
+    /* chapter 1 by touch: Walls, two taps, Done */
+    await ev(pg,()=>window.__osp.tutStart(0));await pg.waitForTimeout(300);await step(3);
+    await tapS('.dock [data-tool="poly"]');const A=await scr(pg,8000,0),B=await scr(pg,8000,8000);await t.tap(A[0],A[1]+1);await pg.waitForTimeout(120);
+    o.oneDone=await ev(pg,()=>{document.querySelector('#polybar [data-pb="done"]').click();return {pts:(window.__osp.polyPts()||[]).length,walls:window.__osp.S().objs.filter(x=>x.t==='wall').length}});
+    await t.tap(B[0],B[1]-1);await pg.waitForTimeout(120);await tapS('#polybar [data-pb="done"]');await pg.waitForTimeout(1400);
+    o.wall=await ev(pg,()=>{const w=window.__osp.S().objs.filter(x=>x.t==='wall');return {n:w.length,pts:w[0]&&w[0].pts.map(p=>p.map(Math.round)),step:document.querySelector('#tut h4').textContent}});
+    await step(1);o.name=await ev(pg,()=>({tool:document.querySelector('.dock [data-tool].on').dataset.tool,step:document.querySelector('#tut h4').textContent,btn:[...document.querySelectorAll('#tut [data-ta="btn"]')].map(x=>x.textContent).join()}));
+    await tapS('#tut [data-ta="btn"]');o.name.focus=await ev(pg,()=>!!document.activeElement&&document.activeElement.matches('#p-sel [data-f="name"]'));await pg.keyboard.type('Boardroom');
+    {const p=await scr(pg,4000,5000);await t.tap(p[0],p[1])}await pg.waitForTimeout(1400);o.name.after=await ev(pg,()=>({names:window.__osp.S().objs.filter(x=>x.t==='room').map(x=>x.name),step:document.querySelector('#tut h4').textContent}));
+    /* a pen draws a wall while a hand rests on the glass and the pen hovers across it */
+    {const cdp=await ctx.newCDPSession(pg);const pen=async(x,y,press)=>{for(const type of press?['mouseMoved','mousePressed','mouseReleased']:['mouseMoved'])await cdp.send('Input.dispatchMouseEvent',{type,x,y,button:type==='mouseMoved'?'none':'left',clickCount:1,pointerType:'pen'});await pg.waitForTimeout(40)};
+      await ev(pg,()=>{const o=window.__osp;o.tutExit();o.newTab(o.blankPlan());o.setTool('poly')});await pg.waitForTimeout(250);const v0=await ev(pg,()=>({...window.__osp.view()})),pc=await ev(pg,()=>{const r=document.querySelector('#plan').getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2]}),a=[pc[0]-200,pc[1]-100],c=[pc[0]+200,pc[1]-100];
+      await pen(a[0],a[1],true);await t.T('touchStart',[[a[0]+60,a[1]+260]]);for(let k=1;k<=6;k++)await pen(a[0]+(c[0]-a[0])*k/6,a[1]+30,false);await pen(c[0],c[1],true);await t.T('touchEnd',[]);
+      o.pen=await ev(pg,([v0,a,c])=>{const o=window.__osp,v=o.view(),r=document.querySelector('#plan').getBoundingClientRect(),W=q=>[v0.x+(q[0]-r.left)/v0.k,v0.y+(q[1]-r.top)/v0.k];const pts=o.polyPts()||[];
+        return {n:pts.length,near:pts.length===2&&[a,c].every((q,i)=>Math.hypot(W(q)[0]-pts[i][0],W(q)[1]-pts[i][1])<30/v0.k+260),moved:Math.abs(v.x-v0.x)+Math.abs(v.y-v0.y)>1}},[v0,a,c]);await pg.keyboard.press('Escape')}
+    /* the room-turning step after the room was turned by hand */
+    await ev(pg,()=>window.__osp.tutStart(2));await pg.waitForTimeout(300);await step(5);
+    o.turn=await ev(pg,async()=>{const o=window.__osp,w=ms=>new Promise(r=>setTimeout(r,ms));const h=document.querySelector('#tut h4').textContent;const m=o.S().objs.find(x=>x.t==='room'&&x.pts.some(p=>p[0]===12000)&&x.pts.some(p=>p[1]===0)&&x.pts.length===4&&Math.abs(x.pts[0][0]-x.pts[2][0])<=4000);
+      o.setTool('su-rotate');o.suRotStart([m.id],[10000,2000]);o.suRotRef([11000,2000]);o.suRotApply(45);o.suRotCommit();o.setTool('select');await w(400);const i0=o.TUT().i;o.tutAuto();await w(1500);return {h,moved:o.TUT().i>i0,back:m.pts.map(p=>p.map(Math.round)).join(' ')}});
+    /* carry on where it was left: the top bar's button offers the step */
+    await ev(pg,()=>window.__osp.tutExit());await tapS('#b-tut');await pg.waitForTimeout(300);o.cont=await ev(pg,()=>{const b=document.querySelector('#tut-menu [data-tc="go"]');return b?b.textContent:null});
+    await tapS('#tut-menu [data-tc="go"]');await pg.waitForTimeout(600);o.resumed=await ev(pg,()=>({ch:window.__osp.TUT().ch,i:window.__osp.TUT().i,on:window.__osp.TUT().on}));await ev(pg,()=>window.__osp.tutExit());
+    o.errs=errs.slice(0,3);out[vw+'x'+vh]=o;
+  }catch(e){out[vw+'x'+vh]=Object.assign(o,{err:String(e&&e.stack||e).slice(0,300)})}finally{await ctx.close()}}
+  const ok=o=>o&&!o.err&&o.menu.open&&o.menu.fits&&o.menu.n===10&&o.menu.last&&o.menu.started&&o.rings>=60&&!o.off.length&&o.oneDone.pts===1&&o.oneDone.walls===0&&o.wall.n===1&&JSON.stringify(o.wall.pts)==='[[8000,0],[8000,8000]]'&&o.wall.step==='Draw the meeting room'
+    &&o.name.tool==='select'&&o.name.step==='Name the room'&&o.name.btn==='Rename'&&o.name.focus&&o.name.after.names.includes('Boardroom')&&o.name.after.step==='Measure it'&&o.pen.n===2&&o.pen.near&&!o.pen.moved
+    &&o.turn.h==='Turn a room with its grip'&&o.turn.moved&&o.turn.back==='8000,0 12000,0 12000,4000 8000,4000'&&/^Continue chapter 3, step 7/.test(o.cont||'')&&o.resumed.on&&o.resumed.ch===2&&o.resumed.i===6&&!o.errs.length;
+  add(R,'s-ipad-tut','iPad (landscape and upright), by touch: the top bar\'s Tutorial button opens the chapter list, which fits the screen and scrolls to its last chapter; every step\'s ring is on its control, in view and not clipped or covered; Walls by two taps and Done draws the wall (Done after one tap keeps the point and draws nothing); the Name step starts in Select with a Rename button that opens the name, and a typed name moves it on; a pen drawing while a hand rests on the glass and the pen hovers keeps both points and does not move the plan; Do it for me on the room-turning step works after the room was turned by hand; the button then offers Continue chapter 3, step 7 and carries on there',
+    ok(out['1366x1024'])&&ok(out['1024x1366']),out);return R}
+export async function run(b){ids.length=0;const R=[];R.push(...await desktop(b));R.push(...await phone(b));R.push(...await from46(b));R.push(...await ipadSteppers(b));R.push(...await roomOrder(b));R.push(...await ppFloors(b));R.push(...await ipadTutorial(b));return R}
