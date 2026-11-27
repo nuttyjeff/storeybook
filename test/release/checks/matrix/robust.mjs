@@ -221,14 +221,18 @@ export async function fuzzOne(b,kind,seed,N,add,opt={}){
     const p0=back?await ev(pg,()=>window.__osp.past()):0;
     let pres=0;const t0=Date.now();
     /* each floor, and the roof, keeps its own undo history (by design), so "undo all" means undo all here, then on every other level the session touched, then come back to where it started. Found 11 Nov 2026: a session that ended on the roof left a desk move on L1 that the roof's Undo rightly could not reach */
-    const undoHere=async()=>{while(await ev(pg,()=>window.__osp.past())>0&&pres<N*3&&Date.now()-t0<40000){await press(pg,'#b-undo').catch(()=>{});pres++}};
+    /* each undo press is noted with the floor it left the plan on, so redo can mirror the undo phase exactly, press for press and floor for floor (found 27 Nov 2026: a session that ended on another floor than it started was redone on the start floor by the end floor's count) */
+    const undone=[];const flr=()=>ev(pg,()=>window.__osp.roofMode()?'roof':window.__osp.S().bld?window.__osp.S().bld.active:null);
+    const undoHere=async()=>{while(await ev(pg,()=>window.__osp.past())>0&&pres<N*3&&Date.now()-t0<40000){await press(pg,'#b-undo').catch(()=>{});pres++;undone.push(await flr())}};
+    const endFloor=back?await flr():null;
     if(back){await undoHere();
       if(await ev(pg,()=>window.__osp.roofMode())){await ev(pg,()=>window.__osp.switchFloor('roof'));await sleep(150);await undoHere()}
       const here=await ev(pg,()=>window.__osp.S().bld.active);for(const id of await ev(pg,()=>window.__osp.S().bld.levels.map(l=>l.id))){if(id===here)continue;await ev(pg,id=>window.__osp.switchFloor(id),id);await sleep(150);await undoHere()}
       await ev(pg,id=>{const o=window.__osp;if(o.S().bld.levels.some(l=>l.id===id))o.switchFloor(id)},floor0);await sleep(150)}
     const afterU=await canon(pg);
     add(P+'undo',`${S} fuzz: ${INVN.undo}`,back&&afterU===start,{seed,presses:pres,back,differs:afterU===start?[]:diffKeys(start,afterU)});
-    let rp=0;const t1=Date.now();if(back){while(await ev(pg,()=>window.__osp.future())>0&&rp<p0&&Date.now()-t1<40000){await press(pg,'#b-redo').catch(()=>{});rp++}}
+    let rp=0;const t1=Date.now();if(back){for(const f of undone.slice().reverse()){if(Date.now()-t1>40000)break;if(f!=null&&f!==await flr()){await ev(pg,f=>window.__osp.switchFloor(f),f);await sleep(120)}if(!(await ev(pg,()=>window.__osp.future())>0))break;await press(pg,'#b-redo').catch(()=>{});rp++}
+      if(endFloor!=null&&endFloor!==await flr()){await ev(pg,f=>window.__osp.switchFloor(f),endFloor);await sleep(150)}}
     const afterR=await canon(pg);
     add(P+'redo',`${S} fuzz: ${INVN.redo}`,back&&afterR===endT,{seed,presses:rp,differs:afterR===endT?[]:diffKeys(endT,afterR)});
     add(P+'clean',`${S} fuzz: undo / redo phase had no console errors`,pg.errs.length===eFz,pg.errs.slice(eFz,eFz+3));
