@@ -1017,6 +1017,11 @@ export async function ipadSteppers(b){const R=[];const ctx=await b.newContext({v
     const {tap}=await touch(pg);await tap(p[0],p[1]);await pg.waitForTimeout(400);
     const tapped=await pg.evaluate(v=>({focused:document.activeElement===window.__probe,value:window.__probe.value,unchanged:window.__probe.value===v}),p[2]);
     add(R,'s-ipad-steppers','iPad: on every number field in Details (room and desk) the − and + buttons sit clear of the number, the whole number shows, and a tap on the number goes into the field without changing it',res.room.touch&&res.room.n>0&&res.item.n>0&&!res.room.bad.length&&!res.item.bad.length&&(ENGINE!=='chromium'/* only Chromium gives the tests real touch input; a made-up touch event never focuses a field in any browser */||tapped.focused)&&tapped.unchanged&&!errs.length,{...res,tapped,errs:errs.slice(0,2)});
+    /* placing from the library with a finger leaves no preview behind beside the item just placed */
+    await pg.evaluate(()=>{window.__osp.setSel([]);const r=[...document.querySelectorAll('#lib-list .lib-row')].find(x=>x.offsetParent);r&&r.click()});await pg.waitForTimeout(200);
+    const n0=await pg.evaluate(()=>window.__osp.S().objs.length);const pp=await pg.evaluate(()=>{const r=document.querySelector('#plan').getBoundingClientRect();return [r.left+r.width*0.5,r.top+r.height*0.85]});await tap(pp[0],pp[1]);await pg.waitForTimeout(300);
+    const gh=await pg.evaluate(()=>({n:window.__osp.S().objs.length,ghosts:document.querySelectorAll('#plan .it.ghost').length}));
+    add(R,'s-touch-place-ghost','iPad: placing an item with a finger leaves no preview of it behind once the finger lifts',gh.n===n0+1&&gh.ghosts===0,{n0,...gh});
   }catch(e){add(R,'s-ipad-steppers','iPad steppers check ran',false,String(e&&e.stack||e).slice(0,300))}finally{await ctx.close()}return R}
 /* a room drawn round smaller rooms does not cover them: they stay drawn on top and a click inside one selects it (found on an iPad, 26 Nov 2026) */
 export async function roomOrder(b){const R=[];const ctx=await b.newContext({viewport:{width:1300,height:850}});
@@ -1028,6 +1033,11 @@ export async function roomOrder(b){const R=[];const ctx=await b.newContext({view
     const p=await pg.evaluate(()=>{const o=window.__osp;const sm=o.S().objs.find(q=>q.t==='room'&&q.name==='Room 1');const r=document.querySelector(`#L-rooms [data-id="${sm.id}"]`).getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2]});const got=await pg.evaluate(([x,y])=>{const o=window.__osp;const small=o.S().objs.find(q=>q.t==='room'&&q.name==='Room 1');const e=document.elementFromPoint(x,y);return {top:e&&e.closest('[data-id]')?e.closest('[data-id]').dataset.id:null,small:small&&small.id,rooms:o.S().objs.filter(q=>q.t==='room').length}},p);
     await pg.mouse.click(p[0],p[1]);await pg.waitForTimeout(150);const picked=await pg.evaluate(()=>window.__osp.sel());
     add(R,'s-room-order','A room drawn round a smaller room leaves the smaller one drawn on top, and a click inside it selects the smaller room',got.rooms===2&&got.top===got.small&&picked.length===1&&picked[0]===got.small,{...got,picked});
+    /* the key-set card: each button shows that set's keys; nothing changes until Confirm */
+    await pg.evaluate(()=>window.__osp.suSheet(true));await pg.waitForTimeout(150);const before=await pg.evaluate(()=>window.__osp.suOn());
+    const shows=async k=>{await pg.click(`#su-modal [data-su=${k}]`);await pg.waitForTimeout(100);return pg.evaluate(()=>({sel:[...document.querySelectorAll('#su-modal tbody tr')].find(r=>r.cells[0].textContent==='Select').cells[1].textContent,ok:document.querySelector('#su-modal [data-su=ok]').textContent,su:window.__osp.suOn()}))};
+    const vsu=await shows('su'),vsb=await shows('sb');await pg.click('#su-modal [data-su=ok]');await pg.waitForTimeout(100);const after=await pg.evaluate(()=>({su:window.__osp.suOn(),open:!document.querySelector('#su-modal').hidden}));
+    add(R,'s-keyset-card','Key-set card: SketchUp keys shows Space for Select, StoreyBook keys shows V, nothing changes until Confirm, and Confirm StoreyBook keys turns them on and closes the card',vsu.sel==='Space'&&vsb.sel==='V'&&vsu.su===before&&vsb.su===before&&/Confirm StoreyBook keys/.test(vsb.ok)&&after.su===false&&!after.open,{before,vsu,vsb,after});
   }catch(e){add(R,'s-room-order','Room order check ran',false,String(e&&e.stack||e).slice(0,300))}finally{await ctx.close()}return R}
 /* Push/Pull in the Building view: pressing on a storey and dragging up raises that floor only (27 Nov 2026) */
 export async function ppFloors(b){const R=[];const ctx=await b.newContext({viewport:{width:1300,height:850}});
