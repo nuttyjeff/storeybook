@@ -1069,12 +1069,14 @@ export async function ipadTutorial(b){const R=[];const out={};
     o.menu.last=await ev(pg,()=>{const l=document.querySelector('#tut-menu .tut-ml'),r=[...l.querySelectorAll('.tut-ch')].pop().getBoundingClientRect(),q=l.getBoundingClientRect();return r.bottom<=q.bottom+1&&r.top>=q.top-1});
     await ev(pg,()=>{document.querySelector('#tut-menu .tut-ml').scrollTop=0});await tapS('#tut-menu [data-tc="0"]');await pg.waitForTimeout(400);o.menu.started=await ev(pg,()=>window.__osp.TUT().on&&window.__osp.TUT().ch===0);
     /* every step's ring sits on a control that is in view and not clipped */
-    const chs=await ev(pg,()=>window.__osp.tutChapters());const off=[];let rings=0;
+    const chs=await ev(pg,()=>window.__osp.tutChapters());const off=[];let rings=0;o.keys=[];
     for(let c=0;c<chs.length;c++){await ev(pg,c=>window.__osp.tutStart(c),c);await pg.waitForTimeout(300);
       for(let i=0;i<chs[c];i++){await pg.waitForTimeout(150);const r=await ev(pg,()=>{const o=window.__osp;o.tutTick();const hl=document.querySelector('.tut-hl');if(!hl)return null;const q=hl.getBoundingClientRect();if(q.left<0||q.top<0||q.right>innerWidth||q.bottom>innerHeight)return 'off screen';
           for(let a=hl.parentElement;a&&a!==document.body;a=a.parentElement){const cs=getComputedStyle(a);if(/(auto|scroll|hidden)/.test(cs.overflowX+cs.overflowY)){const b=a.getBoundingClientRect();if(q.left<b.left-1||q.right>b.right+1||q.top<b.top-1||q.bottom>b.bottom+1)return 'clipped by '+(a.id||a.className)}}
           const top=document.elementFromPoint(q.left+q.width/2,q.top+q.height/2);if(top&&!hl.contains(top)&&!top.contains(hl))return 'under '+(top.id||top.className);return 'ok'});
-        if(r==='ok')rings++;else if(r)off.push((c+1)+'.'+(i+1)+' '+r);await step(1)}}
+        if(r==='ok')rings++;else if(r)off.push((c+1)+'.'+(i+1)+' '+r);
+        /* no step asks a touch user for a key they have no keyboard for */
+        {const kb=await ev(pg,()=>{const t=document.querySelector('#tut');return t&&/<kbd>(Enter|Esc|Ctrl|Shift|Alt|Space|Tab|PageUp|PageDown|W A S D)[^<]*<\/kbd>|press <kbd>|key <kbd>/.test(t.innerHTML)?document.querySelector('#tut h4').textContent:null});if(kb)o.keys.push((c+1)+'.'+(i+1)+' '+kb)}await step(1)}}
     o.rings=rings;o.off=off.slice(0,5);await ev(pg,()=>{const o=window.__osp;o.tutExit();o.TUT().pid=null;delete o.P().tut.last});
     /* chapter 1 by touch: Walls, two taps, Done */
     await ev(pg,()=>window.__osp.tutStart(0));await pg.waitForTimeout(300);await step(3);
@@ -1098,11 +1100,32 @@ export async function ipadTutorial(b){const R=[];const out={};
     /* carry on where it was left: the top bar's button offers the step */
     await ev(pg,()=>window.__osp.tutExit());await tapS('#b-tut');await pg.waitForTimeout(300);o.cont=await ev(pg,()=>{const b=document.querySelector('#tut-menu [data-tc="go"]');return b?b.textContent:null});
     await tapS('#tut-menu [data-tc="go"]');await pg.waitForTimeout(600);o.resumed=await ev(pg,()=>({ch:window.__osp.TUT().ch,i:window.__osp.TUT().i,on:window.__osp.TUT().on}));await ev(pg,()=>window.__osp.tutExit());
+    /* the Measurements box by touch: tapped after a move, a typed 1000 and Done makes the move exactly 1,000 mm; Copy shows while moving and turns copying on */
+    o.vcb=await ev(pg,()=>{const o=window.__osp;o.tutExit();o.newTab(o.blankPlan());return 1});await pg.waitForTimeout(300);
+    o.vcb=await ev(pg,()=>{const o=window.__osp,S=o.S();const d={id:'vd'+Date.now(),t:'item',cat:'Workstation',name:'Desk',x:2000,y:2000,w:1600,h:800,rot:0};S.objs.push(d);o.setTool('su-move');o.suMoveStart([d.id],[d.x,d.y]);const v=document.querySelector('#vcb'),c=v&&v.querySelector('.cp');return {id:d.id,shown:!!v&&!v.hidden,copyShown:!!c&&!c.hidden}});
+    await tapS('#vcb .cp');o.vcb.copyOn=await ev(pg,()=>{const m=window.__osp.SU().mv;return !!(m&&m.copy)});
+    await ev(pg,()=>{const o=window.__osp;o.suCopyToggle();o.suMoveApply([0,500]);o.suMoveCommit()});await pg.waitForTimeout(200);
+    await tapS('#vcb');o.vcb.input=await ev(pg,()=>!!document.activeElement&&document.activeElement.matches('#vcb input'));await pg.keyboard.type('1000');await pg.keyboard.press('Enter');await pg.waitForTimeout(300);
+    o.vcb.after=await ev(pg,id=>{const o=window.__osp,d=o.S().objs.find(x=>x.id===id);return d?Math.round(Math.hypot(d.x-2000,d.y-2000)):null},o.vcb.id);
+    /* a keyboard attached (a key pressed outside a text box): the key hints come back */
+    await ev(pg,()=>document.activeElement&&document.activeElement.blur());await pg.keyboard.press('Shift');await ev(pg,()=>{const o=window.__osp;o.tutExit();o.tutStart(0)});await pg.waitForTimeout(300);await step(1);
+    o.kbHint=await ev(pg,()=>/key <kbd>/.test((document.querySelector('#tut')||{}).innerHTML||'')||!window.__osp.suOn());await ev(pg,()=>window.__osp.tutExit());
     o.errs=errs.slice(0,3);out[vw+'x'+vh]=o;
   }catch(e){out[vw+'x'+vh]=Object.assign(o,{err:String(e&&e.stack||e).slice(0,300)})}finally{await ctx.close()}}
   const ok=o=>o&&!o.err&&o.menu.open&&o.menu.fits&&o.menu.n===10&&o.menu.last&&o.menu.started&&o.rings>=60&&!o.off.length&&o.oneDone.pts===1&&o.oneDone.walls===0&&o.wall.n===1&&JSON.stringify(o.wall.pts)==='[[8000,0],[8000,8000]]'&&o.wall.step==='Draw the meeting room'
     &&o.name.tool==='select'&&o.name.step==='Name the room'&&o.name.btn==='Rename'&&o.name.focus&&o.name.after.names.includes('Boardroom')&&o.name.after.step==='Measure it'&&o.pen.n===2&&o.pen.near&&!o.pen.moved
-    &&o.turn.h==='Turn a room with its grip'&&o.turn.moved&&o.turn.back==='8000,0 12000,0 12000,4000 8000,4000'&&/^Continue chapter 3, step 7/.test(o.cont||'')&&o.resumed.on&&o.resumed.ch===2&&o.resumed.i===6&&!o.errs.length;
-  add(R,'s-ipad-tut','iPad (landscape and upright), by touch: the top bar\'s Tutorial button opens the chapter list, which fits the screen and scrolls to its last chapter; every step\'s ring is on its control, in view and not clipped or covered; Walls by two taps and Done draws the wall (Done after one tap keeps the point and draws nothing); the Name step starts in Select with a Rename button that opens the name, and a typed name moves it on; a pen drawing while a hand rests on the glass and the pen hovers keeps both points and does not move the plan; Do it for me on the room-turning step works after the room was turned by hand; the button then offers Continue chapter 3, step 7 and carries on there',
+    &&o.turn.h==='Turn a room with its grip'&&o.turn.moved&&o.turn.back==='8000,0 12000,0 12000,4000 8000,4000'&&/^Continue chapter 3, step 7/.test(o.cont||'')&&o.resumed.on&&o.resumed.ch===2&&o.resumed.i===6&&!o.keys.length&&o.vcb.shown&&o.vcb.copyShown&&o.vcb.copyOn&&o.vcb.input&&o.vcb.after===1000&&o.kbHint&&!o.errs.length;
+  add(R,'s-ipad-tut','iPad (landscape and upright), by touch: the top bar\'s Tutorial button opens the chapter list, which fits the screen and scrolls to its last chapter; every step\'s ring is on its control, in view and not clipped or covered; Walls by two taps and Done draws the wall (Done after one tap keeps the point and draws nothing); the Name step starts in Select with a Rename button that opens the name, and a typed name moves it on; a pen drawing while a hand rests on the glass and the pen hovers keeps both points and does not move the plan; Do it for me on the room-turning step works after the room was turned by hand; the button then offers Continue chapter 3, step 7 and carries on there; no step asks for a key (Enter, Esc, Ctrl and so on); the Measurements box shows with a Copy button while moving, and tapping it, typing 1000 and Done makes the move exactly 1,000 mm; once a key is pressed outside a text box (a keyboard is attached), the key hints show again',
     ok(out['1366x1024'])&&ok(out['1024x1366']),out);return R}
-export async function run(b){ids.length=0;const R=[];R.push(...await desktop(b));R.push(...await phone(b));R.push(...await from46(b));R.push(...await ipadSteppers(b));R.push(...await roomOrder(b));R.push(...await ppFloors(b));R.push(...await ipadTutorial(b));return R}
+/* the credit is never hidden: on desktop and iPad it sits at the right end of the plan tabs row, visible and on top in 2D, with many tabs, in 3D and while walking */
+export async function creditShown(b){const R=[];const out={};
+  for(const [vw,vh,m] of [[1400,900,0],[1100,800,0],[1366,1024,1],[1024,1366,1],[834,1194,1]]){const ctx=await b.newContext({viewport:{width:vw,height:vh},deviceScaleFactor:1,isMobile:!!m&&ENGINE==='chromium',hasTouch:!!m});const bad=[];
+  try{const pg=await ctx.newPage();await pg.goto(devFile(),{waitUntil:'load'});await pg.waitForFunction(()=>window.__osp&&window.__osp.S,{timeout:20000});await pg.waitForTimeout(400);
+    const chk=async v=>{const r=await ev(pg,()=>{const e=document.querySelector('.credit');if(!e)return 'missing';const cs=getComputedStyle(e),a=e.getBoundingClientRect();if(cs.display==='none'||cs.visibility==='hidden'||+cs.opacity<0.3||!a.width)return 'not shown';if(a.left<0||a.top<0||a.right>innerWidth||a.bottom>innerHeight)return 'off screen';
+      e.style.pointerEvents='auto';const hid=[[a.left+2,a.top+a.height/2],[a.right-2,a.top+a.height/2]].map(([x,y])=>document.elementFromPoint(x,y)).find(t=>t!==e&&!e.contains(t));e.style.pointerEvents='';return hid?'under '+(hid.id||hid.className):'ok'});if(r!=='ok')bad.push(v+': '+r)};
+    await chk('2d');await ev(pg,()=>{const o=window.__osp;for(let i=0;i<6;i++)o.newTab(o.blankPlan())});await pg.waitForTimeout(300);await chk('7 tabs');
+    await ev(pg,()=>document.querySelector('#v3d').click());await pg.waitForTimeout(2000);await chk('3d');
+    await ev(pg,()=>{const o=window.__osp;if(o.walkStart)o.walkStart({pos:[0,0],yaw:0})});await pg.waitForTimeout(1200);await chk('walk');
+  }catch(e){bad.push('error '+String(e).slice(0,120))}finally{await ctx.close()}out[vw+'x'+vh]=bad}
+  add(R,'s-credit','The credit (Designed by Jeff Ying, BI) is shown, in view and not covered on desktop and iPad (landscape and upright): in 2D, with seven plan tabs, in 3D and while walking',Object.values(out).every(x=>!x.length),out);return R}
+export async function run(b){ids.length=0;const R=[];R.push(...await desktop(b));R.push(...await phone(b));R.push(...await from46(b));R.push(...await ipadSteppers(b));R.push(...await roomOrder(b));R.push(...await ppFloors(b));R.push(...await creditShown(b));R.push(...await ipadTutorial(b));return R}
