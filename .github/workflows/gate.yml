@@ -19,7 +19,7 @@ jobs:
       - id: s
         run: |
           SMALL='[
-            {"name":"core","args":"--only=build,load,golden,smoke,detect,visual,deploy","files":"","dev":""},
+            {"name":"core","args":"--only=build,load,golden,smoke,textfit,detect,visual,deploy","files":"","dev":""},
             {"name":"functions-chaos","args":"--only=build,functions,sync,chaos","files":"","dev":""},
             {"name":"rules-users-speed","args":"--only=build,rules,except,users,perf","files":"","dev":""},
             {"name":"phone-3d-data","args":"--only=matrix","files":"phone2d,view3d,data","dev":""},
