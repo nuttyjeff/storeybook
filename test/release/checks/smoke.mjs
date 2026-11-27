@@ -1029,4 +1029,18 @@ export async function roomOrder(b){const R=[];const ctx=await b.newContext({view
     await pg.mouse.click(p[0],p[1]);await pg.waitForTimeout(150);const picked=await pg.evaluate(()=>window.__osp.sel());
     add(R,'s-room-order','A room drawn round a smaller room leaves the smaller one drawn on top, and a click inside it selects the smaller room',got.rooms===2&&got.top===got.small&&picked.length===1&&picked[0]===got.small,{...got,picked});
   }catch(e){add(R,'s-room-order','Room order check ran',false,String(e&&e.stack||e).slice(0,300))}finally{await ctx.close()}return R}
-export async function run(b){ids.length=0;const R=[];R.push(...await desktop(b));R.push(...await phone(b));R.push(...await from46(b));R.push(...await ipadSteppers(b));R.push(...await roomOrder(b));return R}
+/* Push/Pull in the Building view: pressing on a storey and dragging up raises that floor only (27 Nov 2026) */
+export async function ppFloors(b){const R=[];const ctx=await b.newContext({viewport:{width:1300,height:850}});
+  try{const pg=await ctx.newPage();const errs=[];pg.on('pageerror',e=>errs.push('PE:'+e.message));await pg.goto(devFile(),{waitUntil:'load'});await pg.waitForFunction(()=>window.__osp&&window.__osp.S,{timeout:20000});
+    await pg.evaluate(()=>document.querySelector('#m-sample').click());await pg.waitForTimeout(400);
+    await pg.evaluate(()=>{if(window.__osp.P().insp===false)document.querySelector('#t-insp').click();document.querySelector('#tab-bld').click()});await pg.waitForTimeout(200);
+    await pg.click('#p-bld [data-bb="addL"]');await pg.waitForTimeout(300);
+    const before=await pg.evaluate(()=>{const S=window.__osp.S();return S.bld.levels.map(l=>l.ceiling!=null&&l.ceiling!==''?+l.ceiling:+S.bld.ceiling)});
+    await pg.click('#vbld');await pg.waitForFunction(()=>{const T=window.__osp.T3();return T&&T.bldPick&&T.bldPick.length>=2},{timeout:30000});await pg.waitForTimeout(600);
+    await pg.evaluate(()=>window.__osp.setTool('su-push'));
+    const pt=await pg.evaluate(()=>{const T=window.__osp.T3(),cv=document.querySelector('#v3c').getBoundingClientRect();const b=T.bldPick.find(x=>x.id===window.__osp.S().bld.levels[1].id);const p=b.mesh.position.clone().project(T.camera);return [cv.left+(p.x+1)/2*cv.width,cv.top+(1-p.y)/2*cv.height]});
+    await pg.mouse.move(pt[0],pt[1]);await pg.mouse.down();for(let i=1;i<=10;i++){await pg.mouse.move(pt[0],pt[1]-i*8);await pg.waitForTimeout(30)}await pg.mouse.up();await pg.waitForTimeout(500);
+    const after=await pg.evaluate(()=>{const S=window.__osp.S();return S.bld.levels.map(l=>l.ceiling!=null&&l.ceiling!==''?+l.ceiling:+S.bld.ceiling)});
+    add(R,'s-pp-floors','Push/Pull in the Building view: pressing on the second floor and dragging up raises that floor\'s height and leaves the first floor as it was',before.length===2&&after[1]>before[1]&&after[0]===before[0]&&!errs.length,{before,after,errs:errs.slice(0,2)});
+  }catch(e){add(R,'s-pp-floors','Push/Pull floors check ran',false,String(e&&e.stack||e).slice(0,300))}finally{await ctx.close()}return R}
+export async function run(b){ids.length=0;const R=[];R.push(...await desktop(b));R.push(...await phone(b));R.push(...await from46(b));R.push(...await ipadSteppers(b));R.push(...await roomOrder(b));R.push(...await ppFloors(b));return R}

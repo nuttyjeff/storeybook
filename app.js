@@ -518,7 +518,7 @@ function setNorth(v,opts={}){v=((Math.round(+v||0)%360)+360)%360;if(v===num(S.no
 function northScreenAngle(){if(!is3D||!T3||!T3.camera)return 0;const {camera,controls}=T3;const a=controls.target.clone(),b=a.clone();b.z-=1;a.project(camera);b.project(camera);const dx=b.x-a.x,dy=-(b.y-a.y);if(Math.abs(dx)+Math.abs(dy)<1e-6)return 0;return Math.atan2(dx,-dy)*180/Math.PI}
 /* the dock grew with the SketchUp tools: whatever sits in the bottom right corner (Measurements box, coordinates, the 2D / 3D button, the Push/Pull value box) moves up above it when the window is too narrow for both, so nothing ends up under the dock */
 const dockNat=new Map();let dockKey='';
-function dockClear(){const d=$('.dock'),m=$('#main');if(!d||!m)return;const r=d.getBoundingClientRect(),mr=m.getBoundingClientRect(),dt=mr.bottom-r.top,key=innerWidth+'x'+innerHeight;if(key!==dockKey){dockKey=key;dockNat.clear()}
+function dockClear(){const d=$('.dock'),m=$('#main');if(!d||!m)return;const r=d.getBoundingClientRect(),mr=m.getBoundingClientRect(),dt=mr.bottom-r.top,key=innerWidth+'x'+innerHeight;/* messages sit above the dock, however many rows it has */m.style.setProperty('--dockh',Math.max(0,Math.round(dt))+'px');if(key!==dockKey){dockKey=key;dockNat.clear()}
   /* where each sits by its own style sheet rule: measured once per window size, with anything set here taken off first */
   const nat=e=>{if(!e)return null;const c=getComputedStyle(e);if(c.display==='none'||c.visibility==='hidden')return null;let n=dockNat.get(e);if(!n){const b0=e.style.bottom,r0=e.style.right;e.style.bottom='';e.style.right='';const b=e.getBoundingClientRect();e.style.bottom=b0;e.style.right=r0;if(!b.width)return null;n={b:mr.bottom-b.bottom,h:b.height,gap:mr.right-b.right};dockNat.set(e,n)}const w=e.getBoundingClientRect().width;return{b:n.b,h:n.h,l:mr.right-n.gap-w,r:mr.right-n.gap}};
   const under=n=>r.width>0&&n.r>r.left&&n.l<r.right&&n.b<dt&&n.b+n.h>mr.bottom-r.bottom,put=(e,b,rt)=>{if(e.style.bottom!==b)e.style.bottom=b;if(e.style.right!==rt)e.style.right=rt};
@@ -641,14 +641,16 @@ function draw(){
   const mg=P.grid*5;$('#gp-major').setAttribute('width',mg);$('#gp-major').setAttribute('height',mg);$('#gp-major path').setAttribute('d',`M${mg} 0H0V${mg}`);
   $('#gr-minor').style.display=P.grid*k<6?'none':'';$('#L-grid').style.display=LY('grid')?'':'none';
   // rooms
-  let rs='',an='';
+  let rs='',an='',ro='';
   const wallPx=P.wall>0?Math.max(1.5,P.wall*k):1.5;
   /* larger rooms first, so a room drawn round others never covers them: the smaller ones stay visible and are what a click inside them picks (found on an iPad, 26 Nov 2026) */
   S.objs.filter(o=>o.t==='room').map((o,i)=>[o,i,o.pts&&o.pts.length>2?Math.abs(polyArea(o.pts)):0]).sort((a,b)=>b[2]-a[2]||a[1]-b[1]).map(x=>x[0]).forEach(o=>{
     const d='M'+o.pts.map(p=>p[0]+' '+p[1]).join('L')+'Z';
     const fc=o.floorCol||(S.style&&S.style.floor);
     const mg=LY('mig')?migRoom(o):null;
-    if(LY('walls'))rs+=`<path data-id="${o.id}" class="room-f${sel.has(o.id)?' sel':''}${mg?' mig-'+mg.st:''}" d="${d}" stroke-width="${o.nowall?0:wallPx}" vector-effect="non-scaling-stroke"${fc&&!sel.has(o.id)?` style="fill:${fc};fill-opacity:.6"`:''}/>`;
+    /* the fill here; the outline is drawn after every room's fill (ro), so no room ever hides another room's walls, however they overlap */
+    if(LY('walls')){rs+=`<path data-id="${o.id}" class="room-f room-fill${sel.has(o.id)?' sel':''}${mg?' mig-'+mg.st:''}" d="${d}"${fc&&!sel.has(o.id)?` style="fill:${fc};fill-opacity:.6"`:''}/>`;
+      if(!o.nowall)ro+=`<path class="room-f room-o${sel.has(o.id)?' sel':''}${mg?' mig-'+mg.st:''}" d="${d}" stroke-width="${wallPx}" vector-effect="non-scaling-stroke"/>`}
     const c=centroid(o.pts),area=Math.abs(polyArea(o.pts))/1e6,b=bboxPts(o.pts);
     if((b.x1-b.x0)*k>70&&(b.y1-b.y0)*k>36){
       if(LY('labels'))an+=`<text class="room-lbl" x="${c[0]}" y="${c[1]-fs(3)}" font-size="${fs(13)}" text-anchor="middle">${esc(o.name||'Room')}</text>`;if(LY('areas'))an+=`<text class="room-area" x="${c[0]}" y="${c[1]+(LY('labels')?fs(13):0)}" font-size="${fs(11)}" text-anchor="middle">${area.toFixed(1)} m²</text>`;
@@ -656,7 +658,7 @@ function draw(){
     }
     if(LY('walldims')&&(P.dims==='all'||sel.has(o.id))){const ccw=polyArea(o.pts)<0;for(let i=0;i<o.pts.length;i++){const a=o.pts[i],e=o.pts[(i+1)%o.pts.length],L=Math.hypot(e[0]-a[0],e[1]-a[1]);if(L*k<40)continue;let nx=(e[1]-a[1])/L,ny=-(e[0]-a[0])/L;if(ccw){nx=-nx;ny=-ny}const off=fs(12)+(P.wall/2);const mx=(a[0]+e[0])/2+nx*off,my=(a[1]+e[1])/2+ny*off;let ang=Math.atan2(e[1]-a[1],e[0]-a[0])*180/Math.PI;if(ang>90)ang-=180;if(ang<-90)ang+=180;an+=`<text class="edge-lbl" font-size="${fs(10.5)}" text-anchor="middle" dominant-baseline="central" transform="translate(${mx} ${my}) rotate(${ang})">${fmt(L)}</text>`}}
   });
-  rs=siteSVG()+rs;
+  rs=siteSVG()+rs+ro;
   if(LY('walls'))S.objs.filter(o=>o.t==='wall'&&!o.site).forEach(o=>{
     if(!o.pts||o.pts.length<2)return;
     const d='M'+wallPathPts(o).map(p=>p[0]+' '+p[1]).join('L')+(o.closed?'Z':'');
@@ -665,6 +667,8 @@ function draw(){
   });
   if(roofMode&&roofRefObjs.length){let rf='<g style="pointer-events:none">';roofRefObjs.forEach(o=>{if(!o.pts||o.pts.length<2)return;const d='M'+wallPathPts(o).map(p=>p[0]+' '+p[1]).join('L')+((o.t==='room'||o.closed)?'Z':'');rf+=o.t==='room'?`<path d="${d}" fill="#5f6b78" fill-opacity=".05" stroke="#5f6b78" stroke-opacity=".3" stroke-width="${fs(1.2)}" stroke-dasharray="${fs(6)} ${fs(5)}"/>`:`<path d="${d}" fill="none" stroke="#5f6b78" stroke-opacity=".4" stroke-width="${Math.max(o.th||100,fs(2))}"/>`});rs=rf+'</g>'+rs}
   $('#L-rooms').innerHTML=rs;
+  /* a camera's view, live in Details while it moves or turns: how much floor it sees, walls taken off */
+  {const el=document.getElementById('cctv-cov');if(el&&sel.size===1){const o=byId([...sel][0]);if(o&&isCCTV(o)){const A=Math.abs(polyArea(cctvPoly(o))),full=Math.PI*Math.pow(o.range||15000,2)*(o.fov||90)/360;el.textContent=`Sees about ${Math.round(A/1e6)} m² of floor${A<full*0.98?', the rest blocked by walls':''}`}}}
   // zones and items
   let zs='',is='';
   /* column grid: chain-dot lines with numbered and lettered bubbles */
@@ -676,7 +680,7 @@ function draw(){
   const zOf=o=>isCeil(o)?2:isBaseObj(o)?0:1;
   S.objs.filter(o=>o.t==='item'&&visible(o)).sort((a,b)=>zOf(a)-zOf(b)).forEach(o=>{
     const tr=`translate(${o.x} ${o.y}) rotate(${o.r||0})${o.flip?' scale(-1 1)':''}`;
-    if(isCeil(o)&&LY('cover')){if(isCCTV(o))zs+=`<path class="cctv-fov${sel.has(o.id)?' on':''}" d="M${cctvPoly(o,camWalls).map(p=>p[0]+' '+p[1]).join('L')}Z"/>`;else if(o.cov>0)zs+=`<circle class="cov" cx="${o.x}" cy="${o.y}" r="${o.cov}"/>`}
+    if(isCeil(o)&&LY('cover')){if(isCCTV(o)){const cp=cctvPoly(o,camWalls);zs+=`<path class="cctv-fov${sel.has(o.id)?' on':''}" d="M${cp.map(p=>p[0]+' '+p[1]).join('L')}Z"/>`;}else if(o.cov>0)zs+=`<circle class="cov" cx="${o.x}" cy="${o.y}" r="${o.cov}"/>`}
     if(LY('zones')){zoneLocal(o).forEach((p,zi)=>{zs+=`<path class="zone${P.clash&&clashCache.zbad.has(o.id+':'+zi)?' bad':''}" transform="${tr}" d="M${p.map(q=>q[0]+' '+q[1]).join('L')}Z"/>`})}
     const cls=`it ${catCls(o.cat)}${isCeil(o)?' ceil':''}${o.col?' painted':''}${P.clash&&clashCache.bad.has(o.id)?' clash':''}`;
     is+=`<g data-id="${o.id}" class="${cls}" transform="${tr}"${o.col?` style="--pc:${o.col}"`:''}>${shapeSVG(o)}${(e=>e.grown?`<rect class="env" x="${e.x0}" y="${e.y0}" width="${e.x1-e.x0}" height="${e.y1-e.y0}"/>`:'')(envOf(o))}</g>`;
@@ -2012,6 +2016,24 @@ const PARAM_INFO={
 (()=>{const st=document.createElement('style');st.textContent=`html.touch :is(#stp-none,body) label.has-stp>input{width:100%!important;padding-right:10px!important;min-height:40px;box-sizing:border-box}
 html.touch :is(#stp-none,body) label.has-stp>.stp{position:static;display:flex;gap:8px;margin-top:6px}
 html.touch :is(#stp-none,body) label.has-stp>.stp>button{flex:1;width:auto!important;min-width:40px!important;height:40px!important;min-height:40px!important}`;document.head.appendChild(st)})();
+/* room fills are a little see-through, so where two rooms overlap it shows darker; outlines sit on top of every fill and never take a click */
+(()=>{const st=document.createElement('style');st.textContent=`.room-fill{stroke:none!important}.room-f.room-fill:not(.mig-over):not(.mig-under){fill-opacity:.82}.room-o{fill:none!important;pointer-events:none}`;document.head.appendChild(st)})();
+/* iPad sizing (26 Nov 2026): library pills keep their pill shape at the finger size; a library row's name and size sit together; the 3D bar
+   wraps instead of hiding its ends; the 3D hint sits above the 2D plan button; the credit moves into the plan tabs row where the dock would cover it */
+(()=>{const st=document.createElement('style');st.textContent=`@media (min-width:821px) and (min-height:501px){
+html.touch :is(#stp-none,body) .chip{min-width:52px!important}
+html.touch .lib-row .nm+br{display:none}
+html.touch :is(#stp-none,body) #main .v3bar{flex-wrap:wrap!important;width:auto!important;overflow:visible!important;justify-content:center!important;row-gap:6px}
+html.touch .mode3d .hint{bottom:calc(136px + env(safe-area-inset-bottom,0px))}
+html.touch :is(#stp-none,body) .dock{flex-wrap:wrap;justify-content:center;overflow:visible;left:12px;right:12px;transform:none;margin:0 auto;width:max-content;max-width:calc(100% - 24px)}
+}
+#ptabs .credit{position:static!important;margin:0 12px 0 auto!important;align-self:center;font-size:10px;opacity:.55}
+#main .toast{bottom:max(86px,calc(var(--dockh,0px) + 12px))}`;document.head.appendChild(st);
+  const cr=document.querySelector('.credit');if(!cr)return;const home=cr.parentElement,next=cr.nextSibling;
+  const mq=matchMedia('(max-width:1100px)'),ph=()=>matchMedia('(max-width:820px), (pointer:coarse) and (max-height:500px)').matches;
+  const place=()=>{const bar=document.querySelector('#ptabs');if(mq.matches&&!ph()&&bar){if(cr.parentElement!==bar)bar.appendChild(cr)}else if(cr.parentElement!==home)home.insertBefore(cr,next)};
+  place();mq.addEventListener?mq.addEventListener('change',place):mq.addListener(place);addEventListener('resize',place);
+  /* the tabs row is redrawn often: keep the credit at its end */new MutationObserver(()=>{if(mq.matches&&!ph()){const bar=document.querySelector('#ptabs');if(bar&&bar.lastElementChild!==cr)bar.appendChild(cr)}}).observe(document.querySelector('#ptabs')||document.body,{childList:true})})();
 function addSteppers(root){if(!TOUCH||!root)return;root.querySelectorAll('label>input[type=number]').forEach(inp=>{const lb=inp.parentElement;if(lb.querySelector('.stp'))return;const st=document.createElement('span');st.className='stp';st.innerHTML='<button type="button" data-stp="-1" aria-label="Less">−</button><button type="button" data-stp="1" aria-label="More">+</button>';lb.appendChild(st);lb.classList.add('has-stp');stpSync(inp)})}
 /* a stepper button at the field's limit is greyed out rather than silently doing nothing */
 function stpSync(inp){const st=inp&&inp.parentElement&&inp.parentElement.querySelector('.stp');if(!st)return;const cur=inp.value===''?(+inp.placeholder||0):(+inp.value||0);
@@ -2039,7 +2061,7 @@ function renderInspector(){if(multiMode)multiSync();{const bd=$('#b-del');if(bd)
   if(l.length===1){const o=l[0];
     if(o.t==='item'){h=`<p class="big">${esc(o.name)}</p><p class="muted">${esc(o.code)} · ${esc(o.cat)}${o.gid?' · in a group':''}</p>${(isOpening(o)||isCore(o))?`<label class="chk" style="display:flex;gap:8px;align-items:center;margin:6px 0;color:var(--ink)"><input type="checkbox" data-f="exit" style="width:auto"${o.exit?' checked':''}> Final exit (egress) — a safe exit for the fire check</label>`:''}${isCore(o)&&S.bld?(()=>{const b=S.bld,nm=levelNames(b),opt=(v,emp)=>`<option value="">${emp}</option>`+b.levels.map(l=>`<option value="${l.id}"${v===l.id?' selected':''}>${nm[l.id]}</option>`).join('');const[lo,hi]=coreRange(b,o);
       return`<div class="sec">Runs through</div><div class="fld"><label>From<select data-f="cfrom">${opt(o.from,'Lowest floor')}</select></label><label>To<select data-f="cto">${opt(o.to,'Top floor')}</select></label>${o.shape==='stair'?`<label class="full" style="display:flex;align-items:center;gap:6px;color:var(--ink)"><input type="checkbox" data-f="croof" style="width:auto"${o.roof!==false?' checked':''}> Continues to the roof (adds a stair-roof box)</label>`:''}</div>
-      <p class="muted">On ${nm[b.levels[lo].id]} to ${nm[b.levels[hi].id]}. Moving or resizing it here moves it on every floor${o.shape==='lift'?'. Lifts stop at the top floor they serve and never go to the roof':''}.</p>`})():''}${isCeil(o)?`<div class="sec">${isCCTV(o)?'Camera':'Ceiling'}</div><div class="fld"><label>Drop below ceiling (mm)<input type="number" data-f="drop" value="${r1(o.drop||0)}" step="50"></label>${isCCTV(o)?`<label>Facing (°)<input type="number" data-f="r" value="${r1(o.r||0)}" step="5"></label><label>Tilt down (°)<input type="number" data-f="tilt" min="0" max="90" value="${r1(o.tilt||0)}" step="5"></label><label>Range (mm)<input type="number" data-f="range" value="${r1(o.range||15000)}" step="500"></label><label class="full">Field of view: <b id="fov-v">${Math.round(o.fov||90)}°</b><input type="range" data-f="fov" min="50" max="180" step="5" value="${o.fov||90}"></label>`:`<label>Coverage radius (mm)<input type="number" data-f="cov" value="${r1(o.cov||0)}" step="500" placeholder="0 = off"></label>`}</div>${isCCTV(o)?`<canvas id="cctv-pov" width="480" height="300" style="width:100%;border-radius:8px;margin-top:8px;background:#1b2026"></canvas><p class="muted">What the camera sees. Drag the dot in front of it on the plan to aim it; the shaded area on the plan is its view, cut off by walls.</p>`:`<p class="muted">${o.cov>0?'Coverage circle shows on the plan (Layers › Coverage and camera views). ':''}Top of the item sits ${fmt(o.drop||0)} mm below the ceiling.</p>`}`:''}
+      <p class="muted">On ${nm[b.levels[lo].id]} to ${nm[b.levels[hi].id]}. Moving or resizing it here moves it on every floor${o.shape==='lift'?'. Lifts stop at the top floor they serve and never go to the roof':''}.</p>`})():''}${isCeil(o)?`<div class="sec">${isCCTV(o)?'Camera':'Ceiling'}</div><div class="fld"><label>Drop below ceiling (mm)<input type="number" data-f="drop" value="${r1(o.drop||0)}" step="50"></label>${isCCTV(o)?`<label>Facing (°)<input type="number" data-f="r" value="${r1(o.r||0)}" step="5"></label><label>Tilt down (°)<input type="number" data-f="tilt" min="0" max="90" value="${r1(o.tilt||0)}" step="5"></label><label>Range (mm)<input type="number" data-f="range" value="${r1(o.range||15000)}" step="500"></label><label class="full">Field of view: <b id="fov-v">${Math.round(o.fov||90)}°</b><input type="range" data-f="fov" min="50" max="180" step="5" value="${o.fov||90}"></label>`:`<label>Coverage radius (mm)<input type="number" data-f="cov" value="${r1(o.cov||0)}" step="500" placeholder="0 = off"></label>`}</div>${isCCTV(o)?`<canvas id="cctv-pov" width="480" height="300" style="width:100%;border-radius:8px;margin-top:8px;background:#1b2026"></canvas><p class="muted" id="cctv-cov" style="margin:6px 0 0"></p><p class="muted">What the camera sees. Drag the dot in front of it on the plan to aim it; the shaded area on the plan is its view, cut off by walls.</p>`:`<p class="muted">${o.cov>0?'Coverage circle shows on the plan (Layers › Coverage and camera views). ':''}Top of the item sits ${fmt(o.drop||0)} mm below the ceiling.</p>`}`:''}
       <div class="fld" style="margin-top:10px">
       <label class="full">Label on plan<input data-f="label" value="${esc(o.label)}" placeholder="${esc(itemLabel(Object.assign({},o,{label:''})))}"></label>
       <label>Width (mm)<input type="number" data-f="w" value="${r1(o.w)}"></label><label>Depth (mm)<input type="number" data-f="d" value="${r1(o.d)}"></label>
@@ -3854,9 +3876,13 @@ function suMatsOpen(){let m=$('#su-mats');if(!m){m=document.createElement('div')
 function suPPTarget(o,wallHit){if(!o)return null;
   /* looked up afresh each time: Undo replaces the plan's objects, and a kept reference would write to one that is gone */
   if(o.t==='item'&&!isSite(o)){const id=o.id;return{key:'h:'+id,label:'Height',get:()=>{const q=byId(id);return q?+q.h||0:0},set:v=>{const q=byId(id);if(q)q.h=Math.round(Math.max(10,Math.min(30000,v)))},ids:[id]}}
-  if((o.t==='room'||o.t==='wall'||wallHit)&&S.bld){const lid=bldLevel(S).id,L=()=>(S.bld&&S.bld.levels.find(x=>x.id===lid))||bldLevel(S);return{key:'c:'+lid,label:'Floor to ceiling',get:()=>lvVal(S.bld,L(),'ceiling'),set:v=>{L().ceiling=Math.round(Math.max(1000,Math.min(30000,v)))},ids:[]}}
+  if((o.t==='room'||o.t==='wall'||wallHit)&&S.bld)return suPPLevel(bldLevel(S).id);
   if(o.t==='room'||o.t==='wall'||wallHit){toast('Walls take their height from the floor. Set up the building in Details › Floors to pull it');return null}
   return null}
+/* a floor's height: pulling a room, a wall or (in the Building view) the storey itself sets that floor's floor-to-ceiling height, and the storey
+   grows or shrinks with it (floor to floor = ceiling + ceiling void + slab) */
+function suPPLevel(lid){if(!S.bld)return null;const L=()=>(S.bld&&S.bld.levels.find(x=>x.id===lid))||bldLevel(S);let nm='';try{nm=levelNames(S.bld)[lid]||''}catch(e){}
+  return{key:'c:'+lid,label:'Floor to ceiling'+(nm?' · '+nm:''),get:()=>lvVal(S.bld,L(),'ceiling'),set:v=>{L().ceiling=Math.round(Math.max(1000,Math.min(30000,v)))},ids:[]}}
 function suPPStart(t,ev,ppm){SU.pp={t,v0:t.get(),y0:ev?ev.clientY:0,ppm:ppm||0,moved:false,cp:false,armed:false};SU.typed='';updateHint();vcbSync()}
 let suPPraf=0;
 function suPPSet(v){const p=SU.pp;if(!p)return;if(!p.cp){suCP();p.cp=true}p.t.set(v);markDirty();clashDirty=true;if(is3D){if(!suPPraf)suPPraf=requestAnimationFrame(()=>{suPPraf=0;build3D()})}else render();vcbSync();updateHint()}
@@ -3872,10 +3898,11 @@ function suChipFor(){const L=SU.last;if(!L||L.kind!=='pp')return;if(!suChip){suC
 /* 3D: press on an item, wall or floor and pull; or click, move, click */
 (()=>{const cv=$('#v3c'),host=$('#v3');if(!cv||!host)return;
   const pick=e=>{if(!T3)return null;const{THREE,camera,group}=T3;const r=cv.getBoundingClientRect();const rc=new THREE.Raycaster();rc.setFromCamera(new THREE.Vector2(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1),camera);
+    /* the Building view: the storey under the pointer */if(bldView&&T3.bldPick&&T3.bldPick.length){const hit=rc.intersectObjects(T3.bldPick.map(b=>b.mesh),false)[0];if(hit){const b=T3.bldPick.find(x=>x.mesh===hit.object);return b?{lvl:b.id,p:hit.point}:null}return null}
     for(const h of rc.intersectObjects(group.children,true)){let m=h.object;while(m&&!m.userData.id)m=m.parent;if(!m)continue;const o=byId(m.userData.id);if(!o||fixed(o))continue;return{o,wall:m.userData.paint==='wall',p:h.point}}return null};
   const ppm=(p)=>{const{camera}=T3,r=cv.getBoundingClientRect();const a=p.clone().project(camera),b=p.clone();b.y+=1;b.project(camera);return Math.max(0.005,Math.abs(a.y-b.y)*r.height/2/1000)};
   host.addEventListener('pointerdown',e=>{if(e.target!==cv)return;if(tool!=='su-push'||!is3D||WALK.on||e.button!==0)return;e.stopImmediatePropagation();e.preventDefault();
-    if(SU.pp){suPPCommit();return}const h=pick(e);if(!h){toast('Press on an item, a wall or a floor');return}const t=suPPTarget(h.o,h.wall);if(!t)return;if(suChip)suChip.hidden=true;
+    if(SU.pp){suPPCommit();return}const h=pick(e);if(!h){toast(bldView?'Press on a floor of the building':'Press on an item, a wall or a floor');return}const t=h.lvl?suPPLevel(h.lvl):suPPTarget(h.o,h.wall);if(!t)return;if(suChip)suChip.hidden=true;
     if(T3.controls)T3.controls.enabled=false;suPPStart(t,e,ppm(h.p));SU.pp.down=[e.clientX,e.clientY];try{capPtr(cv,e.pointerId)}catch(_){}},true);
   host.addEventListener('pointermove',e=>{const p=SU.pp;if(!p||!is3D||tool!=='su-push')return;e.stopImmediatePropagation();let v=p.v0+(p.y0-e.clientY)/p.ppm;const st=e.altKey?10:50;v=Math.round(v/st)*st;if(Math.abs(e.clientY-p.y0)>3)p.moved=true;if(v!==p.t.get())suPPSet(v)},true);
   host.addEventListener('pointerup',e=>{const p=SU.pp;if(!p||tool!=='su-push')return;e.stopImmediatePropagation();if(p.down&&Math.hypot(e.clientX-p.down[0],e.clientY-p.down[1])>6){suPPCommit()}else{p.armed=true;p.down=null;updateHint()}},true);
@@ -3965,8 +3992,8 @@ const TUT_CH=[
   {h:'Open Floors',at:'#tab-bld',enter:()=>{openInsp();showTab('sel')},say:()=>`In the panel on the right, click the <b>Floors</b> tab. This is where a plan becomes a building: floor heights, slabs, basements and the roof.`,done:()=>!$('#p-bld').hidden&&!!P.insp,auto:()=>showTab('bld',true)},
   {h:'Add a floor',at:'#p-bld [data-bb="addL"]',say:()=>`Click <b>+ Floor on top</b>. The new floor repeats this one (a typical floor) until you change it.`,base:()=>S.bld?S.bld.levels.length:1,done:b=>!!S.bld&&S.bld.levels.length>b,auto:()=>{showTab('bld',true);const x=$('#p-bld [data-bb="addL"]');if(x)x.click()}},
   {h:'Move between floors',at:'#b-floor',say:()=>`Use the floor button at the top (or <kbd>PageUp</kbd> and <kbd>PageDown</kbd>) to go up to L2, then come back to L1.`,done:()=>{if(!S.bld)return false;const g=S.bld.levels.find(l=>l.kind!=='B'),here=bldLevel(S);if(here!==g)TUT.f.up=1;return !!TUT.f.up&&here===g},auto:()=>{const L=S.bld.levels.filter(l=>l.kind!=='B');if(L[1])switchFloor(L[1].id);TUT.f.up=1;switchFloor(L[0].id)}},
-  {h:'A road',at:'.dock [data-tool="road"]',say:()=>`Click <b>Road</b>, click at each end of the dashed line below the building and press <kbd>Enter</kbd>. Roads, fences and landscape belong to the site and show on the ground floor.`,box:[-4500,-4000,16500,15000],ghost:()=>tgLine([-3000,12500],[15000,12500],'road'),base:tSites,done:b=>tSites()>b,auto:()=>tPoly('road',[[-3000,12500],[15000,12500]])},
-  {h:'A fence',at:'.dock [data-tool="fence"]',say:()=>`Click <b>Fence</b> and click round the corners of the dashed line, then press <kbd>Enter</kbd>.`,box:[-4500,-4000,16500,15000],ghost:()=>tgLine([-2500,-2500],[14500,-2500],'fence')+tgLine([14500,-2500],[14500,8500],''),base:tSites,done:b=>tSites()>b,auto:()=>tPoly('fence',[[-2500,-2500],[14500,-2500],[14500,8500]])},
+  {h:'A road',at:'.dock [data-tool="road"]',say:()=>`Click <b>Road</b>. Follow the dashed line: click where it starts on the street, at the corner where it turns into the site, and at the front of the building, then press <kbd>Enter</kbd>. Roads, fences and landscape belong to the site and show on the ground floor.`,box:[-4500,-4000,16500,18500],ghost:()=>tgLine([-3000,16500],[6000,16500],'road')+tgLine([6000,16500],[6000,11000],''),base:tSites,done:b=>tSites()>b,auto:()=>tPoly('road',[[-3000,16500],[6000,16500],[6000,11000]])},
+  {h:'A fence',at:'.dock [data-tool="fence"]',say:()=>`Click <b>Fence</b> and go round the site along the dashed line: start at one side of the gate, click each corner, and finish at the other side of the gate, then press <kbd>Enter</kbd>. The gap is where the road comes in.`,box:[-4500,-4000,16500,18500],ghost:()=>tgLine([2500,12000],[-2500,12000],'fence')+tgLine([-2500,12000],[-2500,-2500],'')+tgLine([-2500,-2500],[14500,-2500],'')+tgLine([14500,-2500],[14500,12000],'')+tgLine([14500,12000],[9500,12000],'')+tgLab(6000,12000-fs(10),'gate'),base:tSites,done:b=>tSites()>b,auto:()=>tPoly('fence',[[2500,12000],[-2500,12000],[-2500,-2500],[14500,-2500],[14500,12000],[9500,12000]])},
   {h:'Set north',at:'#north',say:()=>`Drag the north arrow to turn it; double-click sets it back to up. North drives the sun and shadows in 3D.`,base:()=>num(S.north,0),done:b=>num(S.north,0)!==b,auto:()=>setNorth(30)}]},
  {t:'3D, checks and saving',d:'See the building in 3D, pull a height, turn on the sun, walk through, cut a section, run the checks, leave a comment and save.',steps:[
   {h:'Go to 3D',at:'#v3d',say:()=>`Click <b>3D</b> at the top (<kbd>Tab</kbd> switches back and forth).`,done:()=>is3D&&!bldView&&!!T3,auto:()=>set3D(true)},
@@ -5849,7 +5876,9 @@ function cctvPoly(o,runs){runs=runs||wallRuns();const segs=runs.map(r=>[r.a,r.b]
     segs.forEach(([p,q])=>{const ex=q[0]-p[0],ey=q[1]-p[1],den=dx*ey-dy*ex;if(Math.abs(den)<1e-9)return;const wx=p[0]-o.x,wy=p[1]-o.y;const u=(wx*ey-wy*ex)/den,v=(wx*dy-wy*dx)/den;if(u>60&&u<t&&v>=0&&v<=1)t=u});
     pts.push([o.x+dx*t,o.y+dy*t])}
   return pts}
-/* the camera's own picture: the 3D scene rendered from the lens. Past 120° it is stitched from 2 or 3 views side by side */
+/* the camera's own picture: the 3D scene rendered from the lens. Past 100° it is a panorama: narrow strips of about 10°, all with the same
+   vertical angle, so straight lines bend gently the way a wide lens shows them (two or three wide views side by side made a straight row of
+   desks look broken at each seam, found on an iPad, 27 Nov 2026) */
 let povT=null;function schedulePOV(){clearTimeout(povT);povT=setTimeout(renderPOV,120)}
 function renderPOV(){const cv=$('#cctv-pov');if(!cv)return;const o=selList()[0];if(!isCCTV(o))return;const g2=cv.getContext('2d');
   const note=t=>{g2.fillStyle='#1b2026';g2.fillRect(0,0,cv.width,cv.height);g2.fillStyle='#c9d1d9';g2.font='13px sans-serif';g2.textAlign='center';g2.fillText(t,cv.width/2,cv.height/2)};
@@ -5860,15 +5889,15 @@ function renderPOV(){const cv=$('#cctv-pov');if(!cv)return;const o=selList()[0];
   if(!is3D){const keep=P.wall3d;P.wall3d='full';T3.framed=true;build3D();P.wall3d=keep}
   const me=group.children.filter(c=>c.userData.id===o.id);me.forEach(c=>c.visible=false);
   const ceil=S.bld?lvVal(S.bld,bldLevel(S),'ceiling'):2800,y=(ceil-(o.drop||0)-(o.h||100)*0.6)*s;
-  const cam=T3.povCam||(T3.povCam=new THREE.PerspectiveCamera(60,1.6,0.05,200));const fov=o.fov||90,k=fov>120?Math.ceil(fov/90):1,slice=fov/k,tilt=(o.tilt||0)*Math.PI/180,base=((o.r||0)+90)*Math.PI/180;
+  const cam=T3.povCam||(T3.povCam=new THREE.PerspectiveCamera(60,1.6,0.05,200));const fov=o.fov||90,k=fov>100?Math.ceil(fov/10):1,slice=fov/k,tilt=(o.tilt||0)*Math.PI/180,base=((o.r||0)+90)*Math.PI/180;
   const sz=R.getSize(new THREE.Vector2()),pr=R.getPixelRatio();const W=cv.width,H=cv.height;R.setPixelRatio(1);R.setSize(W,H,false);R.setScissorTest(true);
   for(let i=0;i<k;i++){const x0=Math.floor(i*W/k),w=Math.floor((i+1)*W/k)-x0;R.setViewport(x0,0,w,H);R.setScissor(x0,0,w,H);
-    cam.aspect=w/H;cam.fov=2*Math.atan(Math.tan(slice*Math.PI/360)/cam.aspect)*180/Math.PI;cam.updateProjectionMatrix();
+    if(k===1){cam.aspect=w/H;cam.fov=2*Math.atan(Math.tan(slice*Math.PI/360)/cam.aspect)*180/Math.PI}else{const V=Math.min(100,fov*H/W);cam.fov=V;cam.aspect=Math.tan(slice*Math.PI/360)/Math.tan(V*Math.PI/360)}cam.updateProjectionMatrix();
     const a=base+(-fov/2+slice*(i+0.5))*Math.PI/180;cam.position.set(o.x*s,y,o.y*s);cam.up.set(0,1,0);cam.lookAt(o.x*s+Math.cos(a)*Math.cos(tilt),y-Math.sin(tilt),o.y*s+Math.sin(a)*Math.cos(tilt));R.render(scene,cam)}
   R.setScissorTest(false);g2.drawImage(R.domElement,0,0,W,H,0,0,W,H);
   me.forEach(c=>c.visible=true);R.setPixelRatio(pr);R.setViewport(0,0,sz.x,sz.y);if(is3D)size3D();else R.setSize(sz.x,sz.y,false);
-  g2.fillStyle='rgba(0,0,0,.55)';g2.fillRect(0,H-22,W,22);g2.fillStyle='#fff';g2.font='12px sans-serif';g2.textAlign='left';g2.fillText(`${o.label||o.name} · ${Math.round(fov)}° · tilt ${Math.round(o.tilt||0)}°${k>1?` · ${k} views stitched`:''}`,8,H-7);
-  if(k>1){g2.strokeStyle='rgba(255,255,255,.35)';for(let i=1;i<k;i++){const x=Math.floor(i*W/k)+0.5;g2.beginPath();g2.moveTo(x,0);g2.lineTo(x,H-22);g2.stroke()}}}
+  g2.fillStyle='rgba(0,0,0,.55)';g2.fillRect(0,H-22,W,22);g2.fillStyle='#fff';g2.font='12px sans-serif';g2.textAlign='left';g2.fillText(`${o.label||o.name} · ${Math.round(fov)}° · tilt ${Math.round(o.tilt||0)}°${k>1?' · panorama':''}`,8,H-7);
+}
 
 /* ================= windows: wall segments, façade fill ================= */
 /* every wall run on this floor (room edges with walls, drawn walls), deduplicated */
