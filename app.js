@@ -2023,9 +2023,10 @@ html.touch :is(#stp-none,body) label.has-stp>.stp>button{flex:1;width:auto!impor
 (()=>{const st=document.createElement('style');st.textContent=`@media (min-width:821px) and (min-height:501px){
 html.touch :is(#stp-none,body) .chip{min-width:52px!important}
 html.touch .lib-row .nm+br{display:none}
-html.touch :is(#stp-none,body) #main .v3bar{flex-wrap:wrap!important;width:auto!important;overflow:visible!important;justify-content:center!important;row-gap:6px}
+html.touch :is(#stp-none,body) #main .v3bar{flex-wrap:wrap!important;width:auto!important;overflow:visible!important;justify-content:center!important;row-gap:8px}
+html.touch :is(#stp-none,body) #main.walking .v3bar{flex-wrap:nowrap!important;overflow-x:auto!important;width:max-content!important;justify-content:flex-start!important}
 html.touch .mode3d .hint{bottom:calc(136px + env(safe-area-inset-bottom,0px))}
-html.touch :is(#stp-none,body) .dock{flex-wrap:wrap;justify-content:center;overflow:visible;left:12px;right:12px;transform:none;margin:0 auto;width:max-content;max-width:calc(100% - 24px)}
+html.touch .dock.more-r{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 48px),transparent)}html.touch .dock.more-l{-webkit-mask-image:linear-gradient(90deg,transparent,#000 48px);mask-image:linear-gradient(90deg,transparent,#000 48px)}html.touch .dock.more-l.more-r{-webkit-mask-image:linear-gradient(90deg,transparent,#000 48px,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(90deg,transparent,#000 48px,#000 calc(100% - 48px),transparent)}
 }
 #ptabs .credit{position:static!important;margin:0 12px 0 auto!important;align-self:center;font-size:10px;opacity:.55}
 #main .toast{bottom:max(86px,calc(var(--dockh,0px) + 12px))}`;document.head.appendChild(st);
@@ -2033,6 +2034,7 @@ html.touch :is(#stp-none,body) .dock{flex-wrap:wrap;justify-content:center;overf
   const mq=matchMedia('(max-width:1100px)'),ph=()=>matchMedia('(max-width:820px), (pointer:coarse) and (max-height:500px)').matches;
   const place=()=>{const bar=document.querySelector('#ptabs');if(mq.matches&&!ph()&&bar){if(cr.parentElement!==bar)bar.appendChild(cr)}else if(cr.parentElement!==home)home.insertBefore(cr,next)};
   place();mq.addEventListener?mq.addEventListener('change',place):mq.addListener(place);addEventListener('resize',place);
+  /* a dock wider than the screen scrolls sideways; its faded edge shows there is more */{const d=document.querySelector('.dock');if(d){const f=()=>{const m=d.scrollWidth-d.clientWidth;d.classList.toggle('more-r',m>2&&d.scrollLeft<m-2);d.classList.toggle('more-l',m>2&&d.scrollLeft>2)};d.addEventListener('scroll',f,{passive:true});addEventListener('resize',f);setTimeout(f,300)}}
   /* the tabs row is redrawn often: keep the credit at its end */new MutationObserver(()=>{if(mq.matches&&!ph()){const bar=document.querySelector('#ptabs');if(bar&&bar.lastElementChild!==cr)bar.appendChild(cr)}}).observe(document.querySelector('#ptabs')||document.body,{childList:true})})();
 function addSteppers(root){if(!TOUCH||!root)return;root.querySelectorAll('label>input[type=number]').forEach(inp=>{const lb=inp.parentElement;if(lb.querySelector('.stp'))return;const st=document.createElement('span');st.className='stp';st.innerHTML='<button type="button" data-stp="-1" aria-label="Less">−</button><button type="button" data-stp="1" aria-label="More">+</button>';lb.appendChild(st);lb.classList.add('has-stp');stpSync(inp)})}
 /* a stepper button at the field's limit is greyed out rather than silently doing nothing */
